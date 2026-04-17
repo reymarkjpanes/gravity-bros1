@@ -1,0 +1,29 @@
+{
+  "unlocked_levels": [
+    1
+  ],
+  "current_level": 1,
+  "score": 0,
+  "coins": 979500,
+  "gems": 0,
+  "stars": 0,
+  "global_xp": 0,
+  "global_level": 1,
+  "unlocked_skins": [
+    "Default"
+  ],
+  "selected_skin": "Default",
+  "unlocked_characters": [
+    "Juan",
+    "Malunggay",
+    "Jose",
+    "Sorbetero",
+    "LapuLapu",
+    "Datu"
+  ],
+  "selected_character": "Datu",
+  "unlocked_powerups": [
+    "None"
+  ],
+  "selected_powerup": "None"
+}
