@@ -8,15 +8,16 @@
     6,
     7,
     8,
-    9
+    9,
+    10
   ],
-  "current_level": 9,
-  "score": 72050,
-  "coins": 652446,
-  "gems": 12,
+  "current_level": 8,
+  "score": 87450,
+  "coins": 652564,
+  "gems": 15,
   "stars": 5,
-  "global_xp": 2050,
-  "global_level": 8,
+  "global_xp": 1780,
+  "global_level": 10,
   "unlocked_skins": [
     "Default"
   ],
@@ -55,9 +56,10 @@
   "unlocked_skills": [
     "grav_flip_speed",
     "grav_air_control",
-    "combat_proj"
+    "combat_proj",
+    "grav_cooldown"
   ],
-  "skill_points": 0,
+  "skill_points": 2,
   "achievements_unlocked": [
     "first_blood",
     "boss_killer"

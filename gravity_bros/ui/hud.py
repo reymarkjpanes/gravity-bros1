@@ -87,7 +87,9 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosse
     # Skill Bar (E)
     ab_rect = pygame.Rect(WIDTH - 150, 35, 130, 12)
     pygame.draw.rect(screen, (50, 50, 50), ab_rect)
-    ab_pct = 1.0 - (player.ability_cooldown / getattr(player, 'max_cooldown', 100) if hasattr(player, 'max_cooldown') else 1)
+    max_cd = getattr(player, 'max_cooldown', 100)
+    if max_cd <= 0: max_cd = 100
+    ab_pct = 1.0 - (player.ability_cooldown / max_cd)
     if ab_pct < 0: ab_pct = 0; 
     if ab_pct > 1: ab_pct = 1
     
@@ -188,12 +190,34 @@ def draw_game_over(screen, font, big_font):
     screen.blit(go_text, (WIDTH//2 - go_text.get_width()//2, HEIGHT//2 - 20))
     screen.blit(r_text, (WIDTH//2 - r_text.get_width()//2, HEIGHT//2 + 30))
 
-def draw_level_cleared(screen, font, big_font, current_level):
+def draw_level_cleared(screen, font, big_font, current_level, player=None):
     overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 128))
+    overlay.fill((10, 15, 30, 220))
     screen.blit(overlay, (0, 0))
-    lc_text = big_font.render("LEVEL CLEARED!", True, GOLD)
+    
+    # Header
+    lc_text = big_font.render("MISSION ACCOMPLISHED!", True, GOLD)
+    screen.blit(lc_text, (WIDTH//2 - lc_text.get_width()//2, HEIGHT//2 - 130))
+    
+    # Stats Panel
+    pygame.draw.rect(screen, (30, 40, 60), (WIDTH//2 - 200, HEIGHT//2 - 60, 400, 150), border_radius=15)
+    pygame.draw.rect(screen, (100, 150, 255), (WIDTH//2 - 200, HEIGHT//2 - 60, 400, 150), 3, border_radius=15)
+    
+    # Draw stats if player is provided
+    if player:
+        stats = [
+            ("Score Earned:", str(getattr(player, 'level_score', 0)), WHITE),
+            ("Total Coins:", str(player.coins), GOLD),
+            ("Max Combo:", str(getattr(player, 'combo_kills', 0)), (255, 150, 50))
+        ]
+        
+        for i, (label, val, color) in enumerate(stats):
+            y_pos = HEIGHT//2 - 40 + (i * 40)
+            l_surf = font.render(label, True, (200, 200, 200))
+            v_surf = font.render(val, True, color)
+            screen.blit(l_surf, (WIDTH//2 - 170, y_pos))
+            screen.blit(v_surf, (WIDTH//2 + 100, y_pos))
+
     next_lvl = current_level + 1 if current_level < 10 else 1
-    prep_text = font.render(f"PREPARING LEVEL {next_lvl}...", True, WHITE)
-    screen.blit(lc_text, (WIDTH//2 - lc_text.get_width()//2, HEIGHT//2 - 40))
-    screen.blit(prep_text, (WIDTH//2 - prep_text.get_width()//2, HEIGHT//2 + 20))
+    prep_text = font.render(f"Proceeding to Level {next_lvl}...", True, (150, 255, 150))
+    screen.blit(prep_text, (WIDTH//2 - prep_text.get_width()//2, HEIGHT//2 + 120))

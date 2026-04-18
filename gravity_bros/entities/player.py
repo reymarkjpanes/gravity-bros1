@@ -92,7 +92,7 @@ class Player(pygame.sprite.Sprite):
             v = getattr(self, attr)
             if v > 0: setattr(self, attr, v - 1)
 
-        if self.combo_timer <= 0 or self.on_ground:
+        if self.combo_timer <= 0:
             self.combo_kills = 0
 
         # Tongue drain update (Aswang life-steal mechanic)
@@ -182,14 +182,15 @@ class Player(pygame.sprite.Sprite):
                 elif self.is_dashing:
                     e.take_damage(2)
                     self.score += 50
-                    effects['hit_stop'] = 2
+                    effects['hit_stop'] = 6
+                    effects['screen_shake'] = 4
                     particles.append(Particle(e.rect.centerx, e.rect.centery, (0, 255, 255), 10))
             
             if self.melee_timer > 0 and self.melee_hitbox.colliderect(e.rect):
                 e.take_damage(2)
                 self.score += 50
-                effects['hit_stop'] = 3
-                effects['screen_shake'] = 3
+                effects['hit_stop'] = 8
+                effects['screen_shake'] = 5
                 particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 10))
 
         # Bosses
@@ -207,14 +208,14 @@ class Player(pygame.sprite.Sprite):
             elif self.rect.colliderect(b.rect) and self.is_dashing and b.invincible_timer <= 0:
                 b.health -= 25
                 b.invincible_timer = 20
-                effects['hit_stop'] = 5
-                effects['screen_shake'] = 6
+                effects['hit_stop'] = 12
+                effects['screen_shake'] = 10
                 particles.append(Particle(b.rect.centerx, b.rect.centery, (0, 255, 255), 15))
             elif self.melee_timer > 0 and self.melee_hitbox.colliderect(b.rect) and b.invincible_timer <= 0:
                 b.health -= 50
                 b.invincible_timer = 20
-                effects['hit_stop'] = 4
-                effects['screen_shake'] = 5
+                effects['hit_stop'] = 15
+                effects['screen_shake'] = 12
                 particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 0, 0), 20))
 
         # Items
@@ -891,6 +892,9 @@ class Player(pygame.sprite.Sprite):
         else:
             return False  # Character not mapped
 
+        if getattr(self, 'has_cooldown_buff', False):
+            self.max_cooldown = int(self.max_cooldown * 0.75)
+            
         self.ability_cooldown = self.max_cooldown
         return True
 
@@ -1236,6 +1240,9 @@ class Player(pygame.sprite.Sprite):
         else:
             return False
 
+        if getattr(self, 'has_cooldown_buff', False):
+            self.awaken_max_cooldown = int(self.awaken_max_cooldown * 0.75)
+            
         self.awaken_cooldown = self.awaken_max_cooldown
         return True
 

@@ -33,10 +33,12 @@ class AchievementManager:
         self.unlocked = list(saved_list)
 
     def unlock(self, ach_id):
-        """Trigger an achievement unlock if not already unlocked."""
+        """Trigger an achievement unlock if not already unlocked. Returns True if newly unlocked."""
         if ach_id in self.registry and ach_id not in self.unlocked:
             self.unlocked.append(ach_id)
             self.queue.append(ach_id)
+            return True
+        return False
 
     def update(self):
         if self.active_popup:

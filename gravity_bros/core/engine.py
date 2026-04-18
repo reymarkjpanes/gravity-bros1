@@ -25,6 +25,9 @@ class GameEngine:
         pygame.display.set_caption("Gravity Bros: Philippine Adventure")
         self.clock = pygame.time.Clock()
         
+        from core.sound_manager import sounds
+        sounds.play_bgm()
+        
         self.font = pygame.font.SysFont("monospace", 24, bold=True)
         self.big_font = pygame.font.SysFont("monospace", 40, bold=True)
         
@@ -435,6 +438,7 @@ class GameEngine:
                     # ---- PAUSED STATE KEYS ----
                     if is_paused:
                         if event.key == pygame.K_q:
+                            is_paused = False
                             self.trigger_transition('MAIN_MENU', 'fade')
                         if event.key == pygame.K_p or event.key == pygame.K_ESCAPE:
                             is_paused = False
@@ -452,6 +456,20 @@ class GameEngine:
                         player.vel_y = 0
                         player.invincibility_timer = 120
                         screen_shake = 10
+                    elif event.key == pygame.K_r and not player.dead:
+                        # Awaken Ultimate (R) — separate from restart
+                        if player.awaken_cooldown <= 0 and getattr(player, 'is_evolved', False):
+                            success = player.trigger_awaken(particles, projectiles, enemies, bosses)
+                            if success:
+                                skill_flash_timer = 200
+                                skill_flash_name = 'AWAKEN ULTIMATE'
+                                skill_flash_color = (255, 215, 0)
+                                skill_cutin.start_awaken(player.selected_character)
+                        elif getattr(player, 'is_evolved', False) and player.awaken_cooldown > 0:
+                            # "NOT READY" flash
+                            skill_flash_timer = 40
+                            skill_flash_name = 'NOT READY!'
+                            skill_flash_color = (255, 60, 60)
                     
                     
                     if event.key == pygame.K_c:
@@ -480,16 +498,11 @@ class GameEngine:
                                 skill_flash_timer = 150
                                 # Tekken-style cut-in
                                 skill_cutin.start(player.selected_character)
-
-                    if event.key == pygame.K_r and not player.dead:
-                        if player.awaken_cooldown <= 0 and getattr(player, 'is_evolved', False):
-                            success = player.trigger_awaken(particles, projectiles, enemies, bosses)
-                            if success:
-                                skill_flash_timer = 200
-                                skill_flash_name = 'AWAKEN ULTIMATE'
-                                skill_flash_color = (255, 215, 0)
-                                # Awaken cut-in (gold palette)
-                                skill_cutin.start_awaken(player.selected_character)
+                        else:
+                            # "NOT READY" flash for skill
+                            skill_flash_timer = 40
+                            skill_flash_name = 'NOT READY!'
+                            skill_flash_color = (255, 60, 60)
                             
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_g:
@@ -555,7 +568,9 @@ class GameEngine:
                 level_complete_timer -= 1
                 if level_complete_timer <= 0:
                     level_complete = False
+                    prev_level = self.selected_level
                     self.selected_level += 1
+                    is_first_clear = (self.selected_level not in self.unlocked_levels)
                     if self.selected_level not in self.unlocked_levels: self.unlocked_levels.append(self.selected_level)
                     if self.selected_level > 10: self.selected_level = 1
                     
@@ -565,10 +580,14 @@ class GameEngine:
                     self.total_stars = player.stars
                     self.global_xp += player.score // 10
                     
+                    # First-time level clear bonus: +2 SP
+                    if is_first_clear:
+                        self.skill_points += 2
+                    
                     while self.global_xp >= self.global_level * 1000:
                         self.global_xp -= self.global_level * 1000
                         self.global_level += 1
-                        self.skill_points += 1  # Earn 1 Skill Point per global level-up!
+                        self.skill_points += 1  # +1 SP per global level-up
                         
                     self._save_current_state()
                     self.trigger_transition('LEVEL_SELECT', 'diamond')
@@ -618,9 +637,13 @@ class GameEngine:
                         
                         dmg_numbers.spawn(e.rect.centerx, e.rect.top - 10, e.max_hp)
                         enemies.remove(e)
-                        self.achievements.unlock('first_blood')
+                        if self.achievements.unlock('first_blood'):
+                            self.skill_points += 1
+                            dmg_numbers.spawn(player.rect.centerx, player.rect.top - 60, '+1 SP', 'heal')
                         if player.combo_kills >= 10:
-                            self.achievements.unlock('combo_10')
+                            if self.achievements.unlock('combo_10'):
+                                self.skill_points += 1
+                                dmg_numbers.spawn(player.rect.centerx, player.rect.top - 60, '+1 SP', 'heal')
                 for b in bosses: 
                     pre_health = b.health
                     was_dead = b.dead
@@ -634,9 +657,11 @@ class GameEngine:
                         # Boss just died! Big explosion party!
                         player.score += 5000
                         player.coins += 50
+                        self.skill_points += 1  # +1 SP for boss kill!
                         screen_shake = 25
                         hit_stop = 20
                         dmg_numbers.spawn(b.rect.centerx, b.rect.top - 20, 5000, 'normal')
+                        dmg_numbers.spawn(b.rect.centerx, b.rect.top - 40, '+1 SP', 'heal')
                         for _ in range(60):
                             particles.append(Particle(b.rect.centerx, b.rect.centery, (255, random.randint(50,200), 0)))
                             particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 255, 255), 8))
@@ -774,6 +799,14 @@ class GameEngine:
             
             cheat_menu.draw(self.screen, self.font, is_immortal, player.coins, is_flappy)
             
+            # Hit-Stop Visual Flash Layer
+            if hit_stop > 0:
+                # Dramatic flash: screen becomes white with intense opacity based on hit_stop
+                alpha = min(200, hit_stop * 15)
+                hit_flash = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                hit_flash.fill((255, 255, 255, alpha))
+                self.screen.blit(hit_flash, (0, 0))
+
             # Apply shaking offset if needed
             if shake_x != 0 or shake_y != 0:
                 temp_surface = self.screen.copy()
@@ -781,14 +814,18 @@ class GameEngine:
                 self.screen.blit(temp_surface, (shake_x, shake_y))
     
             if player.dead: draw_game_over(self.screen, self.font, self.big_font)
-            if level_complete: draw_level_cleared(self.screen, self.font, self.big_font, self.selected_level)
+            if level_complete: draw_level_cleared(self.screen, self.font, self.big_font, self.selected_level, player)
 
             if game_mode == 'ENDLESS':
                 if player.rect.x >= 500000:  # 5000m
-                    self.achievements.unlock('pacifist')
+                    if self.achievements.unlock('pacifist'):
+                        self.skill_points += 1
+                        dmg_numbers.spawn(player.rect.centerx, player.rect.top - 60, '+1 SP', 'heal')
                     
             if self.total_coins >= 1000000:
-                self.achievements.unlock('millionaire')
+                if self.achievements.unlock('millionaire'):
+                    self.skill_points += 1
+                    dmg_numbers.spawn(player.rect.centerx, player.rect.top - 60, '+1 SP', 'heal')
 
             self.achievements.update()
             

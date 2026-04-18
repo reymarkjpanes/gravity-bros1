@@ -23,16 +23,16 @@ def _lerp_color(c1, c2, t):
     return tuple(_clamp(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
 
 
-def _gradient_fill(surf, top_color, bot_color):
+def _gradient_fill(sky, top_color, bot_color):
     """Vertical gradient fill on a surface."""
-    w, h = surf.get_size()
+    w, h = fg.get_size()
     for y in range(h):
         t = y / max(1, h - 1)
         c = _lerp_color(top_color, bot_color, t)
-        pygame.draw.line(surf, c, (0, y), (w, y))
+        pygame.draw.line(fg, c, (0, y), (w, y))
 
 
-def _draw_cloud(surf, x, y, w, h, color=(255, 255, 255), alpha=120):
+def _draw_cloud(sky, x, y, w, h, color=(255, 255, 255), alpha=120):
     """Soft puffy cloud using overlapping ellipses."""
     cs = pygame.Surface((w + 20, h + 20), pygame.SRCALPHA)
     c = (*color, alpha)
@@ -41,72 +41,72 @@ def _draw_cloud(surf, x, y, w, h, color=(255, 255, 255), alpha=120):
     pygame.draw.ellipse(cs, c, (cx - w // 4 - 10, cy - h // 5, w // 2, h // 2))
     pygame.draw.ellipse(cs, c, (cx + 5, cy - h // 4, w // 2, h * 2 // 5))
     pygame.draw.ellipse(cs, c, (cx - w // 6, cy, w // 3, h // 3))
-    surf.blit(cs, (x - 10, y - 10))
+    fg.blit(cs, (x - 10, y - 10))
 
 
-def _draw_mountain_range(surf, base_y, peaks, color, shadow_color=None):
+def _draw_mountain_range(mid, base_y, peaks, color, shadow_color=None):
     """Draw a mountain range with multiple peaks."""
-    w = surf.get_width()
+    w = fg.get_width()
     points = [(0, base_y)]
     for px, py in peaks:
         points.append((px, py))
     points.append((w, base_y))
     points.append((w, base_y + 100))
     points.append((0, base_y + 100))
-    pygame.draw.polygon(surf, color, points)
+    pygame.draw.polygon(fg, color, points)
     if shadow_color:
         for px, py in peaks:
             shadow_pts = [(px, py), (px + 30, py + 40), (px - 10, base_y)]
-            pygame.draw.polygon(surf, shadow_color, shadow_pts)
+            pygame.draw.polygon(fg, shadow_color, shadow_pts)
 
 
 def _draw_palm_tree(surf, x, y, trunk_h=50, leaf_color=(34, 139, 34)):
     """Draw a simple palm tree."""
-    pygame.draw.rect(surf, (100, 60, 20), (x - 3, y - trunk_h, 6, trunk_h))
+    pygame.draw.rect(fg, (100, 60, 20), (x - 3, y - trunk_h, 6, trunk_h))
     # Leaves
     for angle_deg in [-60, -30, 0, 30, 60]:
         rad = math.radians(angle_deg)
         ex = x + int(math.sin(rad) * 25)
         ey = y - trunk_h + int(-abs(math.cos(rad)) * 10)
-        pygame.draw.line(surf, leaf_color, (x, y - trunk_h), (ex, ey - 15), 3)
-        pygame.draw.ellipse(surf, leaf_color, (ex - 8, ey - 20, 16, 12))
+        pygame.draw.line(fg, leaf_color, (x, y - trunk_h), (ex, ey - 15), 3)
+        pygame.draw.ellipse(fg, leaf_color, (ex - 8, ey - 20, 16, 12))
 
 
 def _draw_pine_tree(surf, x, y, h=40, color=(27, 94, 32)):
     """Draw a pine/conifer tree."""
-    pygame.draw.rect(surf, (80, 50, 30), (x - 2, y - 8, 4, 8))
+    pygame.draw.rect(fg, (80, 50, 30), (x - 2, y - 8, 4, 8))
     for i in range(3):
         iy = y - 8 - i * (h // 4)
         iw = 14 - i * 3
-        pygame.draw.polygon(surf, color, [(x, iy - h // 4), (x - iw, iy), (x + iw, iy)])
+        pygame.draw.polygon(fg, color, [(x, iy - h // 4), (x - iw, iy), (x + iw, iy)])
 
 
 def _draw_building(surf, x, y, w, h, wall_color, roof_color, has_windows=True):
     """Draw a building with optional windows."""
-    pygame.draw.rect(surf, wall_color, (x, y - h, w, h))
+    pygame.draw.rect(fg, wall_color, (x, y - h, w, h))
     # Roof
-    pygame.draw.polygon(surf, roof_color, [(x - 5, y - h), (x + w // 2, y - h - 15), (x + w + 5, y - h)])
+    pygame.draw.polygon(fg, roof_color, [(x - 5, y - h), (x + w // 2, y - h - 15), (x + w + 5, y - h)])
     if has_windows:
         for wy in range(y - h + 10, y - 5, 14):
             for wx in range(x + 4, x + w - 6, 10):
                 wc = (255, 255, 150) if random.random() > 0.4 else (40, 40, 60)
-                pygame.draw.rect(surf, wc, (wx, wy, 6, 8))
+                pygame.draw.rect(fg, wc, (wx, wy, 6, 8))
 
 
 def _draw_stalactite(surf, x, y, h, color):
     """Hanging stalactite for cave themes."""
     w = max(3, h // 4)
-    pygame.draw.polygon(surf, color, [(x - w, y), (x, y + h), (x + w, y)])
+    pygame.draw.polygon(fg, color, [(x - w, y), (x, y + h), (x + w, y)])
 
 
 def _draw_coral(surf, x, y, color):
     """Simple branching coral."""
-    pygame.draw.line(surf, color, (x, y), (x, y - 20), 3)
-    pygame.draw.line(surf, color, (x, y - 10), (x - 8, y - 18), 2)
-    pygame.draw.line(surf, color, (x, y - 10), (x + 8, y - 18), 2)
-    pygame.draw.circle(surf, color, (x, y - 20), 4)
-    pygame.draw.circle(surf, color, (x - 8, y - 18), 3)
-    pygame.draw.circle(surf, color, (x + 8, y - 18), 3)
+    pygame.draw.line(fg, color, (x, y), (x, y - 20), 3)
+    pygame.draw.line(fg, color, (x, y - 10), (x - 8, y - 18), 2)
+    pygame.draw.line(fg, color, (x, y - 10), (x + 8, y - 18), 2)
+    pygame.draw.circle(fg, color, (x, y - 20), 4)
+    pygame.draw.circle(fg, color, (x - 8, y - 18), 3)
+    pygame.draw.circle(fg, color, (x + 8, y - 18), 3)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ def _build_boracay(w, h):
     ocean_colors = [(0, 150, 200), (0, 170, 220), (20, 190, 230), (60, 210, 240)]
     for i, oc in enumerate(ocean_colors):
         oy = int(h * 0.50 + i * 25)
-        pygame.draw.rect(mid, oc, (0, oy, w, 25))
+        pygame.draw.rect(fg, oc, (0, oy, w, 25))
     # White sand beach
     pygame.draw.rect(fg, (245, 235, 200), (0, int(h * 0.75), w, int(h * 0.25)))
     pygame.draw.rect(fg, (235, 225, 190), (0, int(h * 0.80), w, int(h * 0.20)))
@@ -367,8 +367,8 @@ def _build_kawasan(w, h):
     wf_surf = pygame.Surface((wf_w, h), pygame.SRCALPHA)
     for y in range(h):
         a = 120 + int(30 * math.sin(y * 0.1))
-        pygame.draw.line(wf_surf, (200, 240, 255, a), (0, y), (wf_w, y))
-    fg.blit(wf_surf, (wf_x, 0))
+        pygame.draw.line(wf_fg, (200, 240, 255, a), (0, y), (wf_w, y))
+    fg.blit(wf_fg, (wf_x, 0))
     # Pool at bottom
     pool = pygame.Surface((w, 60), pygame.SRCALPHA)
     _gradient_fill(pool, (0, 180, 200), (0, 140, 160))
@@ -497,7 +497,9 @@ _BUILDERS = [
     _build_manila,          # 10
 ]
 
+
 def get_background(level, w=None, h=None):
+    """Return (or build+cache) the static background surface for a level."""
     if w is None: w = WIDTH
     if h is None: h = HEIGHT
     key = (level, w, h)
@@ -506,21 +508,12 @@ def get_background(level, w=None, h=None):
         _bg_cache[key] = _BUILDERS[idx](w, h)
     return _bg_cache[key]
 
+
 def draw_background(screen, level, camera_x, time):
-    layers = get_background(level)
-    sky =  layers['sky']
-    mid =  layers['mid']
-    fg  =  layers['fg']
-    
-    sky_x = int(camera_x * 0.05) % sky.get_width()
-    mid_x = int(camera_x * 0.25) % mid.get_width()
-    fg_x  = int(camera_x * 0.70) % fg.get_width()
-    
-    screen.blit(sky, (-sky_x, 0))
-    if sky_x > 0: screen.blit(sky, (sky.get_width() - sky_x, 0))
-    
-    screen.blit(mid, (-mid_x, 0))
-    if mid_x > 0: screen.blit(mid, (mid.get_width() - mid_x, 0))
-    
-    screen.blit(fg, (-fg_x, 0))
-    if fg_x > 0: screen.blit(fg, (fg.get_width() - fg_x, 0))
+    """Render the full multi-layer background with parallax for a level."""
+    bg = get_background(level)
+    # Slow horizontal parallax on the static background
+    parallax_x = int(camera_x * 0.08) % bg.get_width()
+    screen.blit(bg, (-parallax_x, 0))
+    if parallax_x > 0:
+        screen.blit(bg, (bg.get_width() - parallax_x, 0))

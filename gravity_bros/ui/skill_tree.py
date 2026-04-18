@@ -96,5 +96,7 @@ def apply_skill_buffs(player, unlocked_skills):
         player.jump_power = max(player.jump_power, 17)
     if 'agil_double_jump' in unlocked_skills:
         player.double_jump_active = True
-    if 'grav_cooldown' in unlocked_skills and player.ability_cooldown > 0:
-        player.max_cooldown = int(player.max_cooldown * 0.75)
+    if 'grav_cooldown' in unlocked_skills:
+        player.has_cooldown_buff = True
+    else:
+        player.has_cooldown_buff = False

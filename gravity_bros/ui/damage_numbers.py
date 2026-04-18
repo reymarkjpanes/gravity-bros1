@@ -26,7 +26,10 @@ class DamageNumber:
         self.timer = 0
         self.max_timer = 45
 
-        self.is_crit = amount >= 3
+        if isinstance(amount, (int, float)):
+            self.is_crit = amount >= 3
+        else:
+            self.is_crit = False
 
         if dmg_type == 'heal':
             self.text = f"+{amount}"

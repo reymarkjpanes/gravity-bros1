@@ -2,13 +2,14 @@ import pygame
 import random
 import math
 from core.sound_manager import sounds
-from config import WHITE, RED, GREEN
+from config import WHITE, RED, GREEN, WIDTH, HEIGHT
 from .items import Projectile
 from .enemy import Enemy
 
 class Boss:
     def __init__(self, x, y, type_name, difficulty='normal'):
-        self.rect = pygame.Rect(x, y, 80, 80)
+        self.rect = pygame.Rect(x, y, 90, 90)
+        if type_name == 'dambuhala': self.rect = pygame.Rect(x, y, 160, 160)
         self.vel_y = 0
         self.vx = -3
         self.dead = False
@@ -16,10 +17,10 @@ class Boss:
         
         health_mult = 0.5 if difficulty == 'easy' else (1.5 if difficulty == 'hard' else 1.0)
         health_map = {
-            'igorot': 40, 'carabao': 50, 'bakunawa': 60, 'sirena': 40, 'mayon': 80,
-            'tikbalang': 50, 'dambuhala': 70, 'diwata': 40, 'kutsero': 60, 'haring_ibon': 100
+            'igorot': 80, 'carabao': 120, 'bakunawa': 140, 'sirena': 90, 'mayon': 150,
+            'tikbalang': 100, 'dambuhala': 250, 'diwata': 110, 'kutsero': 130, 'haring_ibon': 180
         }
-        self.max_health = int(health_map.get(type_name, 50) * health_mult)
+        self.max_health = int(health_map.get(type_name, 100) * health_mult)
         if self.max_health < 1: self.max_health = 1
         self.health = self.max_health
         
@@ -31,8 +32,13 @@ class Boss:
         self.phase = 1
         self.stun_timer = 0
         
-        # Boss arena boundaries (boss stays within 700px of spawn point)
-        arena_half = 700
+        # Unique Boss Variables
+        self.target_x = x
+        self.target_y = y
+        self.dash_speed = 0
+        self.burst_count = 0
+        
+        arena_half = 450
         self.arena_left  = x - arena_half
         self.arena_right = x + arena_half + self.rect.width
 
@@ -44,26 +50,18 @@ class Boss:
 
         if self.invincible_timer > 0: self.invincible_timer -= 1
         if self.state_timer > 0: self.state_timer -= 1
-        
-        # Check health from external damage (projectiles, melee, skills)
         if self.health <= 0 and not self.dead:
             self.dead = True
             sounds.play('coin')
 
-        self.minion_timer -= 1
-        if self.minion_timer <= 0:
-            self.minion_timer = random.randint(300, 500)
-            minion_type = 'walker' if self.type == 'mayon' else 'hopper'
-            enemies.append(Enemy(self.rect.centerx, self.rect.top, minion_type))
-
-        if self.health <= self.max_health * 0.5:
-            if self.phase == 1:
-                sounds.play('jump')
+        if self.health <= self.max_health * 0.5 and self.phase == 1:
+            sounds.play('jump')
             self.phase = 2
-            
-        self.vel_y += 0.6 if self.type != 'haring_ibon' else 0.1
+
+        self.vel_y += 0.6 if self.type not in ['haring_ibon', 'diwata'] else 0.0
         self.rect.y += int(self.vel_y)
 
+        # Collision with environment
         on_ground = False
         for p in platforms + blocks:
             if self.rect.colliderect(p.rect):
@@ -71,106 +69,185 @@ class Boss:
                     if self.state in ['slamming', 'diving']:
                         sounds.play('stomp')
                         self.state = 'idle'
-                        self.state_timer = 40
+                        self.state_timer = 20
+                        # Igorot Shockwaves
+                        if self.type == 'igorot':
+                            projectiles.append(Projectile(self.rect.centerx, self.rect.bottom-10, -8, 0, 'fireball'))
+                            projectiles.append(Projectile(self.rect.centerx, self.rect.bottom-10, 8, 0, 'fireball'))
+                        # Tikbalang Teleport recovers
+                        if self.type == 'tikbalang':
+                            self.state_timer = 40 if self.phase == 1 else 20
+                            
                     self.rect.bottom = p.rect.top
                     self.vel_y = 0
                     on_ground = True
                 elif self.vel_y < 0:
                     self.rect.top = p.rect.bottom
                     self.vel_y = 0
-
-        if on_ground and self.state_timer <= 0:
-            if self.state not in ['spewing', 'charging']:
-                self.rect.x += int(self.vx)
-                edge = True
-                for p in platforms + blocks:
-                    if p.rect.left <= self.rect.centerx <= p.rect.right:
-                        if abs(self.rect.bottom - p.rect.top) < 5: edge = False
-                
-                if edge or self.rect.left < player.rect.x - 400 or self.rect.right > player.rect.x + 800:
-                    self.vx *= -1
-
-            self.attack_timer -= 1
-            if self.attack_timer <= 0:
-                # ENRAGE phase attacks are insanely fast!
-                self.attack_timer = random.randint(80, 150) if self.phase == 1 else random.randint(20, 50)
-                r = random.random()
-                
-                if self.type == 'igorot':
-                    if r < 0.4: self.vel_y = -15
-                    elif r < 0.7: projectiles.append(Projectile(self.rect.centerx, self.rect.centery, -5 if player.rect.x < self.rect.x else 5, -5, 'fireball'))
-                    else: self.state = 'charging'; self.state_timer = 60
-                elif self.type == 'carabao':
-                    if r < 0.6: self.state = 'charging'; self.vx = -10 if player.rect.x < self.rect.x else 10; self.state_timer = 90
-                    else: self.state = 'slamming'; self.vel_y = -20
-                elif self.type == 'bakunawa':
-                    if r < 0.5: self.state = 'spewing'; self.state_timer = 150
-                    else:
-                        d = -1 if player.rect.x < self.rect.x else 1
-                        for i in range(-2, 3): projectiles.append(Projectile(self.rect.centerx, self.rect.centery, d * 8, i * 3, 'fireball'))
-                elif self.type == 'mayon':
-                    if r < 0.4: self.state = 'spewing'; self.state_timer = 120
-                    else: self.vel_y = -15
-                else:
-                    if r < 0.5: self.vel_y = -15
-                    else: self.state = 'spewing'; self.state_timer = 80
-
-        if self.state == 'spewing':
-            if self.state_timer % (10 if self.phase == 2 else 20) == 0:
-                vx = (random.random() - 0.5) * 12
-                vy = -10 if self.type != 'diwata' else 5
-                projectiles.append(Projectile(self.rect.centerx, self.rect.top if vy < 0 else self.rect.bottom, vx, vy, 'fireball'))
-                sounds.play('jump')
         
-        if self.state == 'charging':
-            self.rect.x += int(self.vx)
-            if self.state_timer < 10: self.vx = -3 if self.vx < 0 else 3
-            
-        if self.state == 'diving' and on_ground:
-            self.state = 'idle'
-            
-        if self.state == 'slamming' and self.vel_y > 0:
-            self.vel_y += 1.0
+        # --- UNIQUE AI PATTERNS ---
+        self.attack_timer -= 1
+        attack_ready = self.attack_timer <= 0 and self.state == 'idle'
+        dist_to_player = player.rect.centerx - self.rect.centerx
+        dir_to_player = 1 if dist_to_player > 0 else -1
 
-        if self.type == 'haring_ibon' and not on_ground:
-            if self.rect.y > 200: self.vel_y -= 0.3
-            else: self.vel_y += 0.2
-            self.rect.x += int(self.vx)
+        if self.type == 'igorot': # 1. Igorot: Leaps and ground slams with shockwaves
+            if self.state == 'idle':
+                self.rect.x += self.vx
+                if self.rect.left < self.arena_left or self.rect.right > self.arena_right: self.vx *= -1
+            if attack_ready:
+                self.attack_timer = random.randint(60, 100) if self.phase == 1 else random.randint(40, 70)
+                if random.random() < 0.6:
+                    self.state = 'slamming'
+                    self.vel_y = -18
+                    self.vx = dir_to_player * 6 # leap towards player
 
-        if self.state_timer <= 0 and self.state not in ['idle', 'diving']:
-            self.state = 'idle'
+        elif self.type == 'carabao': # 2. Carabao: Relentless bull charge stuns on walls
+            if self.state == 'idle':
+                if attack_ready:
+                    self.state = 'charging'
+                    self.dash_speed = dir_to_player * (12 if self.phase == 1 else 18)
+                    self.state_timer = 120
+            elif self.state == 'charging':
+                self.rect.x += self.dash_speed
+                if self.rect.left <= self.arena_left or self.rect.right >= self.arena_right:
+                    self.state = 'idle'
+                    self.stun_timer = 90 # Stunned hitting out of bounds
+                    sounds.play('stomp')
+                    self.dash_speed = 0
 
-        # Hard-clamp boss inside its designated arena
-        if self.rect.left < self.arena_left:
-            self.rect.left = self.arena_left
-            self.vx = abs(self.vx)  # Bounce right
-        if self.rect.right > self.arena_right:
-            self.rect.right = self.arena_right
-            self.vx = -abs(self.vx)  # Bounce left
+        elif self.type == 'bakunawa': # 3. Bakunawa: Flight, geysers
+            self.vel_y = 0 # Fly
+            # Bobbing
+            self.rect.y += math.sin(pygame.time.get_ticks() / 200.0) * 3
+            if self.state == 'idle':
+                self.rect.x += self.vx
+                if self.rect.left < self.arena_left or self.rect.right > self.arena_right: self.vx *= -1
+            if attack_ready:
+                self.attack_timer = random.randint(100, 150)
+                self.state = 'spewing'
+                self.state_timer = 60
+            elif self.state == 'spewing':
+                if self.state_timer % 15 == 0:
+                    px = player.rect.centerx + random.randint(-50, 50)
+                    py = player.rect.bottom
+                    for i in range(3): # Shoot up from floor
+                        projectiles.append(Projectile(px, py + i*20, 0, -8, 'fireball'))
+                
+        elif self.type == 'sirena': # 4. Sirena: Tracking Orbs
+            if self.state == 'idle':
+                if attack_ready:
+                    self.attack_timer = 80 if self.phase == 1 else 50
+                    self.state = 'shooting'
+                    self.burst_count = 3 if self.phase == 1 else 5
+                    self.state_timer = 30
+            elif self.state == 'shooting':
+                if self.state_timer % 10 == 0 and self.burst_count > 0:
+                    self.burst_count -= 1
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 4, -4, 'tracking')) # Tracking logic actually to be implemented in item.py or just use fireball for now
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 6, -2, 'fireball'))
 
-    def take_damage(self, player):
-        self.health -= 1
-        self.invincible_timer = 60
-        self.state = 'idle'
-        self.state_timer = 30
-        sounds.play('stomp')
-        player.vel_y = -12 * getattr(player, 'gravity_dir', 1)
-        if self.health <= 0:
-            self.dead = True
-            player.score += 5000
-            sounds.play('coin')
+        elif self.type == 'mayon': # 5. Mayon: Eruption Artillery
+            if self.state == 'idle':
+                if attack_ready:
+                    self.state = 'erupting'
+                    self.state_timer = 90
+                    self.attack_timer = 150
+            elif self.state == 'erupting':
+                if self.state_timer % 5 == 0:
+                    vx = random.uniform(-10, 10)
+                    vy = random.uniform(-15, -25)
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, vx, vy, 'fireball'))
+
+        elif self.type == 'tikbalang': # 6. Tikbalang: Teleport Stomp
+            if self.state == 'idle':
+                if attack_ready:
+                    self.state = 'teleporting'
+                    self.state_timer = 30
+                    self.attack_timer = 90 if self.phase == 1 else 50
+            elif self.state == 'teleporting':
+                if self.state_timer == 1:
+                    # Teleport directly above player
+                    self.rect.centerx = player.rect.centerx
+                    self.rect.bottom = max(100, player.rect.top - 300)
+                    self.state = 'diving'
+                    self.vel_y = 25 # Instant drop
+                    
+        elif self.type == 'dambuhala': # 7. Dambuhala: Slow massive tank
+            if self.state == 'idle':
+                self.rect.x += 1 if dir_to_player > 0 else -1 # Relentless walk
+                if attack_ready:
+                    self.state = 'throwing'
+                    self.state_timer = 40
+                    self.attack_timer = 120
+            elif self.state == 'throwing':
+                if self.state_timer == 20:
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, dir_to_player * 8, -6, 'fireball'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top+40, dir_to_player * 10, -2, 'fireball'))
+
+        elif self.type == 'diwata': # 8. Diwata: Bullet Hell
+            self.vel_y = 0
+            if self.state == 'idle':
+                # Float center top
+                dest_x = self.arena_left + 450
+                dest_y = 150
+                self.rect.x += (dest_x - self.rect.x) * 0.05
+                self.rect.y += (dest_y - self.rect.y) * 0.05
+                if attack_ready:
+                    self.state = 'bullet_hell'
+                    self.state_timer = 120 if self.phase == 1 else 180
+                    self.attack_timer = 200
+            elif self.state == 'bullet_hell':
+                if self.state_timer % (10 if self.phase == 1 else 5) == 0:
+                    angle = (self.state_timer * 15) % 360
+                    rad = math.radians(angle)
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(rad)*6, math.sin(rad)*6, 'fireball'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(rad+3.14)*6, math.sin(rad+3.14)*6, 'fireball'))
+
+        elif self.type == 'kutsero': # 9. Kutsero: Bouncing wheels
+            if self.state == 'idle':
+                if attack_ready:
+                    self.state = 'whipping'
+                    self.state_timer = 30
+                    self.attack_timer = 60
+            elif self.state == 'whipping':
+                if self.state_timer == 5:
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 12, 0, 'fireball'))
+
+        elif self.type == 'haring_ibon': # 10. Haring Ibon: Sky Dive
+            self.vel_y = 0
+            if self.state == 'idle':
+                # Fly very high out of frame almost
+                dest_y = 50
+                self.rect.y += (dest_y - self.rect.y) * 0.05
+                self.rect.x += self.vx
+                if self.rect.left < self.arena_left or self.rect.right > self.arena_right: self.vx *= -1
+                if attack_ready:
+                    self.state = 'diving'
+                    self.dash_speed = dir_to_player * 15
+                    self.vel_y = 15
+                    self.attack_timer = 100
+            elif self.state == 'diving':
+                self.rect.x += self.dash_speed
+                if on_ground or self.rect.bottom > HEIGHT - 50:
+                    self.state = 'idle'
+                    self.vel_y = -10
+                    sounds.play('stomp')
+                    for i in range(-3, 4):
+                         if i != 0: projectiles.append(Projectile(self.rect.centerx, self.rect.bottom, i*3, -15, 'fireball'))
+
+        # Generic bounds check just in case
+        if self.rect.left < self.arena_left: self.rect.left = self.arena_left; self.vx = abs(self.vx)
+        if self.rect.right > self.arena_right: self.rect.right = self.arena_right; self.vx = -abs(self.vx)
 
     def draw(self, surface, time, camera_x):
         if self.dead: return
-        # Simple procedural graphics for boss since creating 15 boss types of sprites is too repetitive, 
-        # but user has approved "heavily refining them to look aesthetic if procedural".
-        # We will use simple shaped boxes and triangles as in the user data.
         
         if self.invincible_timer > 0 and (time // 100) % 2 == 0:
             return
 
         shake_x, shake_y = 0, 0
-        if self.state == 'spewing' or (self.state == 'slamming' and self.vel_y > 0):
+        if self.state in ['spewing', 'erupting', 'bullet_hell'] or (self.state in ['slamming', 'diving'] and self.vel_y > 0):
             shake_x = random.randint(-3, 3)
             shake_y = random.randint(-3, 3)
 
@@ -183,25 +260,29 @@ class Boss:
         enrage_color = (150, 0, 0) if is_enraged else None
 
         if self.type == 'mayon':
-            color = (255, 69, 0) if self.state == 'spewing' else (enrage_color or (74, 74, 74))
+            color = (255, 69, 0) if self.state == 'erupting' else (enrage_color or (74, 74, 74))
             pygame.draw.polygon(surface, color, [(draw_rect.left, draw_rect.bottom), (draw_rect.centerx, draw_rect.top), (draw_rect.right, draw_rect.bottom)])
             pygame.draw.polygon(surface, (255, 69, 0), [(draw_rect.centerx - 10, draw_rect.top + 20), (draw_rect.centerx, draw_rect.top), (draw_rect.centerx + 10, draw_rect.top + 20)])
+        elif self.type == 'dambuhala':
+            pygame.draw.rect(surface, enrage_color or (50, 60, 50), draw_rect, border_radius=20)
+            pygame.draw.circle(surface, (255,100,50), (draw_rect.centerx, draw_rect.centery - 30), 20)
         elif self.type == 'igorot':
             pygame.draw.rect(surface, enrage_color or (139, 69, 19), draw_rect)
             pygame.draw.rect(surface, (255, 0, 0), (draw_rect.x + 10, draw_rect.y + 10, 60, 20))
         elif self.type == 'carabao':
-            pygame.draw.rect(surface, enrage_color or (105, 105, 105), draw_rect)
+            pygame.draw.rect(surface, enrage_color or (105, 105, 105), draw_rect, border_radius=10)
             pygame.draw.polygon(surface, WHITE, [(draw_rect.left, draw_rect.top), (draw_rect.left - 20, draw_rect.top - 10), (draw_rect.left + 10, draw_rect.top)])
             pygame.draw.polygon(surface, WHITE, [(draw_rect.right, draw_rect.top), (draw_rect.right + 20, draw_rect.top - 10), (draw_rect.right - 10, draw_rect.top)])
         elif self.type == 'bakunawa':
             pygame.draw.ellipse(surface, enrage_color or (0, 0, 139), draw_rect)
-            pygame.draw.rect(surface, (255, 215, 0), (draw_rect.x + 20, draw_rect.y + 20, 40, 40), 2)
+            pygame.draw.rect(surface, (255, 215, 0), (draw_rect.x + 20, draw_rect.y + 20, draw_rect.width-40, draw_rect.height-40), 2)
+        elif self.type == 'tikbalang':
+            pygame.draw.rect(surface, enrage_color or (80, 40, 20), draw_rect)
+            if self.state == 'teleporting':
+                pygame.draw.rect(surface, (255,255,255), draw_rect, 3) # Flash before teleporting
         else:
             pygame.draw.rect(surface, enrage_color or (47, 79, 79), draw_rect)
             pygame.draw.circle(surface, RED, (draw_rect.centerx, draw_rect.centery), 25)
             
         if is_enraged and (time // 150) % 2 == 0:
-            # Draw furious enrage aura
             pygame.draw.rect(surface, RED, draw_rect, 4)
-
-        # Boss health bar is now handled in HUD
