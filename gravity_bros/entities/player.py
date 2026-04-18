@@ -34,6 +34,11 @@ class Player(pygame.sprite.Sprite):
         self.max_cooldown = 300
         self.ability_timer = 0
         self.flight_stamina = 100
+
+        # Awaken Ultimate (separate from Unique Skill)
+        self.awaken_cooldown = 0
+        self.awaken_max_cooldown = 900
+        self.awaken_timer = 0
         
         self.dash_cooldown = 0
         self.is_dashing = False
@@ -83,7 +88,7 @@ class Player(pygame.sprite.Sprite):
             return effects
 
         # Tick timers
-        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer', 'dash_cooldown', 'melee_timer', 'attack_cooldown', 'combo_timer'):
+        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer', 'dash_cooldown', 'melee_timer', 'attack_cooldown', 'combo_timer', 'awaken_cooldown', 'awaken_timer'):
             v = getattr(self, attr)
             if v > 0: setattr(self, attr, v - 1)
 
@@ -887,10 +892,351 @@ class Player(pygame.sprite.Sprite):
             return False  # Character not mapped
 
         self.ability_cooldown = self.max_cooldown
+        return True
 
-        if getattr(self, 'is_evolved', False):
-            self.ability_cooldown = int(self.ability_cooldown * 0.65)
+    def trigger_awaken(self, particles, projectiles, enemies, bosses):
+        """Awaken Ultimate — only available for evolved characters. Separate from E skill."""
+        if self.awaken_cooldown > 0:
+            return False
+        if not getattr(self, 'is_evolved', False):
+            return False
 
+        ch = self.selected_character
+        import random as _rnd
+
+        if ch == 'Juan':
+            # ══ BAHAY KUBO FORTRESS ══
+            # Summons a protective bamboo house — blocks ALL damage, rains coins
+            self.awaken_max_cooldown = 1200
+            self.invincibility_timer = max(self.invincibility_timer, 300)
+            self.shield_active = True
+            self.awaken_timer = 300
+            # Rain coins from above
+            from .items import Coin
+            for i in range(12):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-80, 80),
+                    self.rect.centery - _rnd.randint(30, 100),
+                    (255, 215, 0), size=8))
+            # Golden bamboo wall particles
+            for _ in range(40):
+                angle = _rnd.uniform(0, 6.28)
+                r = _rnd.randint(30, 100)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                particles.append(Particle(px, py, (_rnd.randint(180, 220), _rnd.randint(140, 180), 60), size=10))
+            self._requested_shake = 8
+            sounds.play('jump')
+
+        elif ch == 'Maria':
+            # ══ DIWATA TRANSFORMATION ══
+            # Full flight + homing petal projectiles
+            self.awaken_max_cooldown = 1100
+            self.awaken_timer = 240
+            self.invincibility_timer = max(self.invincibility_timer, 240)
+            self.vel_y = -15 * self.gravity_dir
+            # Burst of radiant petal projectiles in all directions
+            for i in range(12):
+                angle = i * (6.28 / 12)
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    math.cos(angle) * 8, math.sin(angle) * 8, 'book', damage=3))
+            for _ in range(50):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-60, 60),
+                    self.rect.centery + _rnd.randint(-60, 60),
+                    (255, _rnd.randint(180, 255), _rnd.randint(200, 255)), size=7))
+            self._requested_shake = 6
+            sounds.play('jump')
+
+        elif ch == 'LapuLapu':
+            # ══ KADAYAWAN WAR DANCE ══
+            # Berserker war dance — triple attack speed + shockwave rings
+            self.awaken_max_cooldown = 1000
+            self.awaken_timer = 300
+            self.ability_timer = 300  # Extends skill timer too
+            self.speed_boost_timer = max(self.speed_boost_timer, 300)
+            self.invincibility_timer = max(self.invincibility_timer, 60)
+            self.attack_rate = max(1, self.attack_rate // 3)
+            # War dance ring burst
+            for ring in range(5):
+                r = 30 + ring * 25
+                for i in range(16):
+                    angle = i * (6.28 / 16)
+                    px = self.rect.centerx + int(r * math.cos(angle))
+                    py = self.rect.centery + int(r * math.sin(angle))
+                    particles.append(Particle(px, py, (255, _rnd.randint(100, 200), 0), size=7))
+            # Direct boss hit
+            for b in bosses:
+                if abs(b.rect.centerx - self.rect.centerx) < 300 and b.invincible_timer <= 0:
+                    b.health -= 30; b.invincible_timer = 40
+            self._requested_shake = 15
+            sounds.play('jump')
+
+        elif ch == 'Jose':
+            # ══ EL FILIBUSTERISMO ══
+            # Summons 3 ghostly book sentinels that auto-fire
+            self.awaken_max_cooldown = 1000
+            self.awaken_timer = 360
+            # Fire a massive burst of 15 homing quill projectiles
+            for i in range(15):
+                angle = _rnd.uniform(-3.14, 3.14)
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    math.cos(angle) * _rnd.uniform(6, 12),
+                    math.sin(angle) * _rnd.uniform(6, 12), 'book', damage=2))
+            # Enlightenment aura burst
+            for _ in range(60):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-80, 80),
+                    self.rect.centery + _rnd.randint(-80, 80),
+                    (_rnd.randint(60, 120), 0, _rnd.randint(180, 255)), size=8))
+            sounds.play('jump')
+
+        elif ch == 'Andres':
+            # ══ KATIPUNAN REVOLUTION ══
+            # Full screen nuke — kills all enemies, massive boss damage
+            self.awaken_max_cooldown = 1500
+            # Kill ALL enemies on screen
+            for e in enemies:
+                e.take_damage(999)
+            # Devastate bosses
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 40; b.invincible_timer = 60
+                    b.stun_timer = max(b.stun_timer, 120)
+            # Massive revolutionary explosion
+            for i in range(80):
+                angle = i * (6.28 / 80)
+                r = _rnd.randint(10, 200)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                particles.append(Particle(px, py, (255, _rnd.randint(0, 80), 0), size=_rnd.randint(6, 14)))
+            self._requested_shake = 25
+            sounds.play('jump')
+
+        elif ch == 'Aswang':
+            # ══ TIKTIK SWARM ══
+            # Shadow clones drain HP from all enemies, healing player
+            self.awaken_max_cooldown = 1200
+            self.awaken_timer = 300
+            self.invincibility_timer = max(self.invincibility_timer, 300)
+            # Drain all nearby enemies
+            for e in enemies:
+                if abs(e.rect.centerx - self.rect.centerx) < 500:
+                    e.stun_timer = max(e.stun_timer, 180)
+                    e.take_damage(5)
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 20; b.invincible_timer = 30
+            # Dark swarm particles
+            for _ in range(60):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-120, 120),
+                    self.rect.centery + _rnd.randint(-120, 120),
+                    (_rnd.randint(80, 140), 0, _rnd.randint(0, 40)), size=_rnd.randint(5, 10)))
+            self._requested_shake = 10
+            sounds.play('jump')
+
+        elif ch == 'Tikbalang':
+            # ══ ENGKANTO EARTHQUAKE ══
+            # Ground pound + stun everything on screen
+            self.awaken_max_cooldown = 1000
+            self.vel_y = 30 * self.gravity_dir  # Slam down
+            # Stun everything
+            for e in enemies:
+                e.stun_timer = max(e.stun_timer, 300)
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 15; b.invincible_timer = 25
+                    b.stun_timer = max(b.stun_timer, 200)
+            # Earth crack particles
+            for i in range(50):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-150, 150),
+                    self.rect.bottom + _rnd.randint(-10, 30),
+                    (_rnd.randint(100, 160), _rnd.randint(60, 100), 30), size=_rnd.randint(6, 12)))
+            self._requested_shake = 20
+            sounds.play('jump')
+
+        elif ch == 'Kapre':
+            # ══ BALETE DRIVE CURSE ══
+            # Stun and damage everything — darkness engulfs the screen
+            self.awaken_max_cooldown = 1300
+            self.awaken_timer = 240
+            self.invincibility_timer = max(self.invincibility_timer, 240)
+            for e in enemies:
+                e.stun_timer = max(e.stun_timer, 400)
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 20; b.invincible_timer = 30
+                    b.stun_timer = max(b.stun_timer, 240)
+            # Thick dark smoke
+            for _ in range(70):
+                shade = _rnd.randint(20, 60)
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-200, 200),
+                    self.rect.centery + _rnd.randint(-150, 150),
+                    (shade, shade, shade + 10), size=_rnd.randint(10, 20)))
+            self._requested_shake = 8
+            sounds.play('jump')
+
+        elif ch == 'Manananggal':
+            # ══ BUNTOT NG LAGIM ══
+            # Full separation — invincible flight + massive projectile fan
+            self.awaken_max_cooldown = 1200
+            self.awaken_timer = 300
+            self.invincibility_timer = max(self.invincibility_timer, 300)
+            self.vel_y = -20 * self.gravity_dir
+            # 360° viscera projectile burst
+            for i in range(16):
+                angle = i * (6.28 / 16)
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    math.cos(angle) * 10, math.sin(angle) * 10, 'fireball', damage=3))
+            # Horror aura
+            for _ in range(50):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-80, 80),
+                    self.rect.centery + _rnd.randint(-80, 80),
+                    (_rnd.randint(150, 220), 0, _rnd.randint(80, 150)), size=_rnd.randint(5, 12)))
+            self._requested_shake = 12
+            sounds.play('jump')
+
+        elif ch == 'Datu':
+            # ══ MAHARLIKA SUMMON ══
+            # War formation — massive spear fan + stun all
+            self.awaken_max_cooldown = 1000
+            self.awaken_timer = 360
+            # 360° tribal spear wall
+            for i in range(20):
+                angle = i * (6.28 / 20)
+                speed = 9
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    math.cos(angle) * speed, math.sin(angle) * speed, 'fireball', damage=2))
+            for e in enemies:
+                e.stun_timer = max(e.stun_timer, 200)
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 25; b.invincible_timer = 35
+            # Gold tribal explosion
+            for _ in range(45):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-60, 60),
+                    self.rect.centery + _rnd.randint(-60, 60),
+                    (255, _rnd.choice([50, 180, 215]), 0), size=9))
+            self._requested_shake = 14
+            sounds.play('jump')
+
+        elif ch == 'Sorbetero':
+            # ══ HALO-HALO AVALANCHE ══
+            # Massive ice storm — freeze all + continuous damage
+            self.awaken_max_cooldown = 1400
+            self.awaken_timer = 300
+            for e in enemies:
+                e.stun_timer = max(e.stun_timer, 400)
+                e.take_damage(10)
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 25; b.invincible_timer = 30
+                    b.stun_timer = max(b.stun_timer, 250)
+            # Epic blizzard
+            for _ in range(80):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-200, 200),
+                    self.rect.centery + _rnd.randint(-150, 150),
+                    (_rnd.randint(180, 230), _rnd.randint(230, 255), 255), size=_rnd.randint(5, 14)))
+            self._requested_shake = 16
+            sounds.play('jump')
+
+        elif ch == 'Taho':
+            # ══ TAHONG TSUNAMI ══
+            # Giant brown-sugar wave sweeps across, killing everything
+            self.awaken_max_cooldown = 1300
+            # Sweep attack — all enemies take massive damage
+            for e in enemies:
+                e.take_damage(99)
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 35; b.invincible_timer = 50
+            # Brown sugar wave particles
+            for i in range(60):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-40, 200),
+                    self.rect.centery + _rnd.randint(-20, 40),
+                    (_rnd.randint(160, 210), _rnd.randint(80, 130), _rnd.randint(0, 30)), size=_rnd.randint(8, 16)))
+            self._requested_shake = 18
+            sounds.play('jump')
+
+        elif ch == 'Malunggay':
+            # ══ PUNO NG BUHAY — Tree of Life ══
+            # Full heal + massive regen aura + speed
+            self.awaken_max_cooldown = 1200
+            self.awaken_timer = 360
+            self.invincibility_timer = max(self.invincibility_timer, 360)
+            self.speed_boost_timer = max(self.speed_boost_timer, 360)
+            self.double_jump_active = True
+            # Massive green life burst
+            for _ in range(70):
+                angle = _rnd.uniform(0, 6.28)
+                r = _rnd.randint(5, 120)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                particles.append(Particle(px, py,
+                    (0, _rnd.randint(200, 255), _rnd.randint(0, 100)), size=_rnd.randint(6, 12)))
+            self._requested_shake = 8
+            sounds.play('jump')
+
+        elif ch == 'Batak':
+            # ══ SUMPIT NG PALAWAN — Sniper Mode ══
+            # Fires 12 rapid poison darts with massive damage
+            self.awaken_max_cooldown = 900
+            for i in range(12):
+                vy_alt = _rnd.uniform(-4, 4)
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery - 5,
+                    self.facing * (14 + i * 0.8), vy_alt, 'gun', damage=4))
+            # Poison cloud
+            for _ in range(35):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-20, 20),
+                    self.rect.centery + _rnd.randint(-20, 20),
+                    (0, _rnd.randint(180, 255), _rnd.randint(0, 80)), size=7))
+            self._requested_shake = 6
+            sounds.play('jump')
+
+        elif ch == 'Jeepney':
+            # ══ PASADA NG KAMATAYAN — Death Route ══
+            # Full-screen charge that kills everything
+            self.awaken_max_cooldown = 1500
+            self.is_dashing = True
+            self.dash_timer = 60
+            self.invincibility_timer = max(self.invincibility_timer, 60)
+            self.speed_boost_timer = max(self.speed_boost_timer, 60)
+            # Kill absolutely everything
+            for e in enemies:
+                e.take_damage(999)
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 40; b.invincible_timer = 60
+                    b.stun_timer = max(b.stun_timer, 120)
+            # Massive exhaust + chrome explosion
+            for i in range(60):
+                particles.append(Particle(
+                    self.rect.centerx - self.facing * _rnd.randint(0, 100),
+                    self.rect.centery + _rnd.randint(-20, 30),
+                    (_rnd.randint(80, 160), _rnd.randint(80, 160), _rnd.randint(80, 160)), size=_rnd.randint(8, 16)))
+                particles.append(Particle(
+                    self.rect.centerx, self.rect.centery,
+                    (255, _rnd.randint(180, 255), 0), size=8))
+            self._requested_shake = 25
+            sounds.play('jump')
+
+        else:
+            return False
+
+        self.awaken_cooldown = self.awaken_max_cooldown
         return True
 
 

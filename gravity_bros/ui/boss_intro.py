@@ -50,7 +50,8 @@ class BossIntro:
         self.boss_x = boss.rect.centerx
         self.boss_max_hp = boss.health
 
-        info = BOSS_DISPLAY_NAMES.get(boss.boss_type, (boss.boss_type.upper(), 'Unknown', (200,200,200)))
+        boss_type = getattr(boss, 'type', getattr(boss, 'boss_type', 'unknown'))
+        info = BOSS_DISPLAY_NAMES.get(boss_type, (boss_type.upper(), 'Unknown', (200,200,200)))
         self.boss_name = info[0]
         self.boss_subtitle = info[1]
         self.boss_color = info[2]

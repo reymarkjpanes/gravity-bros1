@@ -480,6 +480,16 @@ class GameEngine:
                                 skill_flash_timer = 150
                                 # Tekken-style cut-in
                                 skill_cutin.start(player.selected_character)
+
+                    if event.key == pygame.K_r and not player.dead:
+                        if player.awaken_cooldown <= 0 and getattr(player, 'is_evolved', False):
+                            success = player.trigger_awaken(particles, projectiles, enemies, bosses)
+                            if success:
+                                skill_flash_timer = 200
+                                skill_flash_name = 'AWAKEN ULTIMATE'
+                                skill_flash_color = (255, 215, 0)
+                                # Awaken cut-in (gold palette)
+                                skill_cutin.start_awaken(player.selected_character)
                             
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_g:

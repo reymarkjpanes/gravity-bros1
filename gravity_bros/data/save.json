@@ -3,15 +3,20 @@
     1,
     2,
     3,
-    4
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
   ],
-  "current_level": 4,
-  "score": 20800,
-  "coins": 967163,
-  "gems": 3,
-  "stars": 0,
-  "global_xp": 1150,
-  "global_level": 3,
+  "current_level": 9,
+  "score": 72050,
+  "coins": 652446,
+  "gems": 12,
+  "stars": 5,
+  "global_xp": 2050,
+  "global_level": 8,
   "unlocked_skins": [
     "Default"
   ],
@@ -26,9 +31,12 @@
     "Jose",
     "Andres",
     "Kapre",
-    "Malunggay"
+    "Malunggay",
+    "Jeepney",
+    "Batak",
+    "Maria"
   ],
-  "selected_character": "LapuLapu",
+  "selected_character": "Aswang",
   "unlocked_powerups": [
     "None"
   ],
@@ -39,11 +47,19 @@
   "selected_pet": "None",
   "unlocked_upgrades": [],
   "unlocked_evolutions": [
-    "Aswang"
+    "Aswang",
+    "Malunggay",
+    "Andres",
+    "Manananggal"
   ],
-  "unlocked_skills": [],
-  "skill_points": 2,
+  "unlocked_skills": [
+    "grav_flip_speed",
+    "grav_air_control",
+    "combat_proj"
+  ],
+  "skill_points": 0,
   "achievements_unlocked": [
-    "first_blood"
+    "first_blood",
+    "boss_killer"
   ]
 }

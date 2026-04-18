@@ -32,18 +32,37 @@ _SKILL_NAMES = {
     'Juan':        'BAYANIHAN SPIRIT',
     'Maria':       'FILIPINA GRACE',
     'LapuLapu':    'BATTLE OF MACTAN',
-    'Jose':        'NOLI ME TANGERE',
+    'Jose Rizal':  'NOLI ME TANGERE',
     'Andres':      'SIGAW NG PUGAD LAWIN',
     'Aswang':      'HIGOP NG DUGO',
     'Tikbalang':   'WILD STAMPEDE',
-    'Kapre':       'TABAHOY NG KAPRE',
+    'Kapre':       'KAPRENG PUTI',
     'Manananggal': 'HATAW NG MANANANGGAL',
     'Datu':        'HUSGADO NG DATU',
     'Sorbetero':   'DIRTY KITCHEN BLIZZARD',
     'Taho':        'ARNIBAL GROUND SLAM',
-    'Malunggay':   'SUPERFOOD SURGE',
+    'Malunggay':   'MALUNGGAY PANDESAL',
     'Batak':       'PANA AT TABAK',
-    'Jeepney':     'KONTING TIYAGA',
+    'Jeepney':     'BARYA LANG SA UMAGA',
+}
+
+_AWAKEN_NAMES = {
+    'Juan':        'BAHAY KUBO FORTRESS',
+    'Maria':       'DIWATA TRANSFORMATION',
+    'LapuLapu':    'KADAYAWAN WAR DANCE',
+    'Jose':        'EL FILIBUSTERISMO',
+    'Jose Rizal':  'EL FILIBUSTERISMO',
+    'Andres':      'KATIPUNAN REVOLUTION',
+    'Aswang':      'TIKTIK SWARM',
+    'Tikbalang':   'ENGKANTO EARTHQUAKE',
+    'Kapre':       'BALETE DRIVE CURSE',
+    'Manananggal': 'BUNTOT NG LAGIM',
+    'Datu':        'MAHARLIKA SUMMON',
+    'Sorbetero':   'HALO-HALO AVALANCHE',
+    'Taho':        'TAHONG TSUNAMI',
+    'Malunggay':   'PUNO NG BUHAY',
+    'Batak':       'SUMPIT NG PALAWAN',
+    'Jeepney':     'PASADA NG KAMATAYAN',
 }
 
 
@@ -51,28 +70,23 @@ class SkillCutIn:
     def __init__(self):
         self.active = False
         self.timer = 0
-        self.max_frames = 60
+        self.max_frames = 80  # Increased for better legibility
         self.character = ''
         self.color = (255, 255, 255)
         self.skill_name = ''
+        self.is_awaken = False
         self.portrait = None
         self._font_big = None
         self._font_skill = None
 
     def _ensure_fonts(self):
         if self._font_big is None:
-            self._font_big = pygame.font.SysFont("Impact", 52, bold=True)
-            self._font_skill = pygame.font.SysFont("Impact", 28)
+            # Upgrade font size for impact
+            self._font_big = pygame.font.SysFont("Impact", 64, italic=True)
+            self._font_skill = pygame.font.SysFont("Impact", 36)
 
-    def start(self, character_name):
-        """Trigger the cut-in animation for a character."""
-        self.active = True
-        self.timer = 0
-        self.character = character_name
-        self.color = _CHAR_COLORS.get(character_name, (255, 255, 255))
-        self.skill_name = _SKILL_NAMES.get(character_name, 'SUPER ART')
-
-        # Try to load portrait
+    def _load_char_portrait(self, character_name):
+        """Load character portrait from concept_art folder."""
         self.portrait = None
         art_dir = os.path.join(os.path.dirname(__file__), '..', 'concept_art')
         pattern = os.path.join(art_dir, f"{character_name.lower()}_concept_*.png")
@@ -85,6 +99,26 @@ class SkillCutIn:
                 self.portrait = pygame.transform.smoothscale(img, (int(w * ratio), int(h * ratio)))
             except Exception:
                 pass
+
+    def start(self, character_name):
+        """Trigger the cut-in animation for a Unique Skill."""
+        self.active = True
+        self.timer = 0
+        self.is_awaken = False
+        self.character = character_name
+        self.color = _CHAR_COLORS.get(character_name, (255, 255, 255))
+        self.skill_name = _SKILL_NAMES.get(character_name, 'SUPER ART')
+        self._load_char_portrait(character_name)
+
+    def start_awaken(self, character_name):
+        """Trigger the cut-in animation for an Awaken Ultimate — gold/white palette."""
+        self.active = True
+        self.timer = 0
+        self.is_awaken = True
+        self.character = character_name
+        self.color = (255, 215, 0)  # Gold for ALL awaken ultimates
+        self.skill_name = _AWAKEN_NAMES.get(character_name, 'AWAKEN ULTIMATE')
+        self._load_char_portrait(character_name)
 
     def update(self):
         """Advance the animation by one frame. Returns True while active."""
@@ -151,13 +185,13 @@ class SkillCutIn:
                 slide_x = int(-300 + 350 * min(1.0, phase_t * 1.3))
                 screen.blit(self.portrait, (slide_x, HEIGHT // 2 - self.portrait.get_height() // 2))
 
-        # ── Phase 3 (25-45): Skill name slams in + shockwave ring ──
-        elif t <= 45:
+        # ── Phase 3 (25-65): Skill name slams in + shockwave ring ──
+        elif t <= 65:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 200))
             screen.blit(overlay, (0, 0))
 
-            phase_t = (t - 25) / 20
+            phase_t = (t - 25) / 40
 
             # Band
             band_h = 220
@@ -176,14 +210,21 @@ class SkillCutIn:
             name_surf = self._font_big.render(self.skill_name, True, self.color)
             char_surf = self._font_skill.render(f"— {self.character.upper()} —", True, (255, 255, 255))
 
+            # Extended hang time on screen
             text_x = int(WIDTH + 200 - (WIDTH * 0.6 + 200) * min(1.0, phase_t * 1.5))
-            text_y = HEIGHT // 2 - 30
+            text_y = HEIGHT // 2 - 40
 
-            # Text shadow
-            shadow = self._font_big.render(self.skill_name, True, (0, 0, 0))
-            screen.blit(shadow, (text_x + 3, text_y + 3))
+            # Thick outline instead of weak drop shadow
+            outline = self._font_big.render(self.skill_name, True, (0, 0, 0))
+            for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3), (0, -4), (0, 4), (-4, 0), (4, 0)]:
+                screen.blit(outline, (text_x + dx, text_y + dy))
+                
+            char_outline = self._font_skill.render(f"— {self.character.upper()} —", True, (0, 0, 0))
+            for dx, dy in [(-2, -2), (2, -2), (-2, 2), (2, 2)]:
+                screen.blit(char_outline, (text_x + dx + 10, text_y + dy + 70))
+
             screen.blit(name_surf, (text_x, text_y))
-            screen.blit(char_surf, (text_x + 10, text_y + 55))
+            screen.blit(char_surf, (text_x + 10, text_y + 70))
 
             # Shockwave ring expanding from center
             ring_r = int(50 * phase_t)
@@ -193,9 +234,9 @@ class SkillCutIn:
                 pygame.draw.circle(ring_surf, (*self.color, alpha), (ring_r * 2, ring_r * 2), ring_r, 3)
                 screen.blit(ring_surf, (WIDTH // 2 - ring_r * 2, HEIGHT // 2 - ring_r * 2))
 
-        # ── Phase 4 (45-60): Flash out ──
+        # ── Phase 4 (65-80): Flash out ──
         else:
-            phase_t = (t - 45) / 15
+            phase_t = (t - 65) / 15
             # White flash that fades
             flash_alpha = int(255 * (1.0 - phase_t))
             if flash_alpha > 0:

@@ -23,6 +23,7 @@ def build_level(level, difficulty):
     
     platforms.append(Platform(0, 450, 400, 600))
     current_x = 400
+    last_y = 450
 
     while current_x < level_length:
         width = 200
@@ -32,16 +33,19 @@ def build_level(level, difficulty):
         if level == 1:
             width = 150 + random.random() * 100
             gap = 0
-            y = 450 - (random.randint(0, 3) * 40)
+            y = last_y + random.choice([-20, 0, 20])
             if random.random() > 0.7: gap = 80
         elif level == 2:
             width = 100 + random.random() * 150
             gap = 40 + random.random() * 60
-            y = 450 - (random.random() * 150)
+            y = last_y + random.randint(-40, 40)
         else:
             width = 150 + random.random() * 150
             gap = 90
-            y = 450 - (random.random() * 300)
+            y = last_y + random.randint(-80, 80)
+            
+        y = max(250, min(550, y))
+        last_y = y
 
         current_x += gap
         if random.random() > 0.8:

@@ -84,18 +84,33 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosse
     gravity_text = font.render(f"GRAVITY: {'UP' if getattr(player, 'gravity_dir', 1) == -1 else 'DOWN'}", True, WHITE)
     screen.blit(gravity_text, (WIDTH - gravity_text.get_width() - 20, 10))
     
-    # Skill Bar
-    ab_rect = pygame.Rect(WIDTH - 150, 40, 130, 15)
+    # Skill Bar (E)
+    ab_rect = pygame.Rect(WIDTH - 150, 35, 130, 12)
     pygame.draw.rect(screen, (50, 50, 50), ab_rect)
     ab_pct = 1.0 - (player.ability_cooldown / getattr(player, 'max_cooldown', 100) if hasattr(player, 'max_cooldown') else 1)
     if ab_pct < 0: ab_pct = 0; 
     if ab_pct > 1: ab_pct = 1
     
     color = (0, 255, 0) if ab_pct >= 1.0 else (255, 165, 0)
-    pygame.draw.rect(screen, color, (ab_rect.x, ab_rect.y, int(130 * ab_pct), 15))
+    pygame.draw.rect(screen, color, (ab_rect.x, ab_rect.y, int(130 * ab_pct), 12))
     pygame.draw.rect(screen, WHITE, ab_rect, 1)
     ab_txt = font.render(f"SKILL", True, WHITE)
-    screen.blit(ab_txt, (WIDTH - 150 - ab_txt.get_width() - 10, 35))
+    screen.blit(ab_txt, (WIDTH - 150 - ab_txt.get_width() - 10, 30))
+
+    # Awaken Bar (R) — only if character is evolved
+    if getattr(player, 'is_evolved', False):
+        aw_rect = pygame.Rect(WIDTH - 150, 52, 130, 12)
+        pygame.draw.rect(screen, (50, 40, 0), aw_rect)
+        aw_max = getattr(player, 'awaken_max_cooldown', 900)
+        aw_cd = getattr(player, 'awaken_cooldown', 0)
+        aw_pct = 1.0 - (aw_cd / max(1, aw_max))
+        if aw_pct < 0: aw_pct = 0
+        if aw_pct > 1: aw_pct = 1
+        aw_color = (255, 215, 0) if aw_pct >= 1.0 else (180, 120, 0)
+        pygame.draw.rect(screen, aw_color, (aw_rect.x, aw_rect.y, int(130 * aw_pct), 12))
+        pygame.draw.rect(screen, (255, 215, 0), aw_rect, 1)
+        aw_txt = font.render(f"AWAKEN", True, (255, 215, 0))
+        screen.blit(aw_txt, (WIDTH - 150 - aw_txt.get_width() - 10, 48))
 
     # Boss Health Bar (Dark Souls Style)
     alive_bosses = [b for b in bosses if not b.dead]
@@ -155,13 +170,14 @@ def draw_pause_menu(screen, font, big_font):
     c2 = font.render("Move: A/D or LEFT/RIGHT", True, WHITE)
     c3 = font.render("Jump: W or UP Arrow", True, WHITE)
     c4 = font.render("Basic Attack: F  |  Unique Skill: E", True, WHITE)
+    c4b = font.render("Awaken Ultimate: R  (requires Awaken)", True, (255, 215, 0))
     c5 = font.render("Melee Attack: Q", True, (255, 200, 0))
     c6 = font.render("Gravity Dash: CTRL", True, (0, 200, 255))
     c7 = font.render("Flip Gravity: G", True, (255, 100, 100))
     c8 = font.render("Cheats: C  |  Quit to Menu: Q (while paused)", True, ORANGE)
     
-    for i, t in enumerate([c1, c2, c3, c4, c5, c6, c7, c8]):
-        screen.blit(t, (WIDTH//2 - t.get_width()//2, 190 + i * 40))
+    for i, t in enumerate([c1, c2, c3, c4, c4b, c5, c6, c7, c8]):
+        screen.blit(t, (WIDTH//2 - t.get_width()//2, 190 + i * 38))
     
     r_text = font.render("Press 'ESC' or 'P' to Resume", True, RED)
     screen.blit(r_text, (WIDTH//2 - r_text.get_width()//2, HEIGHT - 50))
