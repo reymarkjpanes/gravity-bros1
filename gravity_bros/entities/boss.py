@@ -49,7 +49,10 @@ class Boss:
             return
 
         if self.invincible_timer > 0: self.invincible_timer -= 1
-        if self.state_timer > 0: self.state_timer -= 1
+        if self.state_timer > 0: 
+            self.state_timer -= 1
+            if self.state_timer == 0 and self.state not in ['idle', 'slamming', 'diving']:
+                self.state = 'idle'
         if self.health <= 0 and not self.dead:
             self.dead = True
             sounds.play('coin')
@@ -72,8 +75,8 @@ class Boss:
                         self.state_timer = 20
                         # Igorot Shockwaves
                         if self.type == 'igorot':
-                            projectiles.append(Projectile(self.rect.centerx, self.rect.bottom-10, -8, 0, 'fireball'))
-                            projectiles.append(Projectile(self.rect.centerx, self.rect.bottom-10, 8, 0, 'fireball'))
+                            projectiles.append(Projectile(self.rect.centerx, self.rect.bottom-10, -8, 0, 'fireball', owner='enemy'))
+                            projectiles.append(Projectile(self.rect.centerx, self.rect.bottom-10, 8, 0, 'fireball', owner='enemy'))
                         # Tikbalang Teleport recovers
                         if self.type == 'tikbalang':
                             self.state_timer = 40 if self.phase == 1 else 20
@@ -132,7 +135,7 @@ class Boss:
                     px = player.rect.centerx + random.randint(-50, 50)
                     py = player.rect.bottom
                     for i in range(3): # Shoot up from floor
-                        projectiles.append(Projectile(px, py + i*20, 0, -8, 'fireball'))
+                        projectiles.append(Projectile(px, py + i*20, 0, -8, 'fireball', owner='enemy'))
                 
         elif self.type == 'sirena': # 4. Sirena: Tracking Orbs
             if self.state == 'idle':
@@ -144,8 +147,8 @@ class Boss:
             elif self.state == 'shooting':
                 if self.state_timer % 10 == 0 and self.burst_count > 0:
                     self.burst_count -= 1
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 4, -4, 'tracking')) # Tracking logic actually to be implemented in item.py or just use fireball for now
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 6, -2, 'fireball'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 4, -4, 'tracking', owner='enemy')) # Tracking logic actually to be implemented in item.py or just use fireball for now
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 6, -2, 'fireball', owner='enemy'))
 
         elif self.type == 'mayon': # 5. Mayon: Eruption Artillery
             if self.state == 'idle':
@@ -157,7 +160,7 @@ class Boss:
                 if self.state_timer % 5 == 0:
                     vx = random.uniform(-10, 10)
                     vy = random.uniform(-15, -25)
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, vx, vy, 'fireball'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, vx, vy, 'fireball', owner='enemy'))
 
         elif self.type == 'tikbalang': # 6. Tikbalang: Teleport Stomp
             if self.state == 'idle':
@@ -182,8 +185,8 @@ class Boss:
                     self.attack_timer = 120
             elif self.state == 'throwing':
                 if self.state_timer == 20:
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, dir_to_player * 8, -6, 'fireball'))
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.top+40, dir_to_player * 10, -2, 'fireball'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, dir_to_player * 8, -6, 'fireball', owner='enemy'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top+40, dir_to_player * 10, -2, 'fireball', owner='enemy'))
 
         elif self.type == 'diwata': # 8. Diwata: Bullet Hell
             self.vel_y = 0
@@ -201,8 +204,8 @@ class Boss:
                 if self.state_timer % (10 if self.phase == 1 else 5) == 0:
                     angle = (self.state_timer * 15) % 360
                     rad = math.radians(angle)
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(rad)*6, math.sin(rad)*6, 'fireball'))
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(rad+3.14)*6, math.sin(rad+3.14)*6, 'fireball'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(rad)*6, math.sin(rad)*6, 'fireball', owner='enemy'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(rad+3.14)*6, math.sin(rad+3.14)*6, 'fireball', owner='enemy'))
 
         elif self.type == 'kutsero': # 9. Kutsero: Bouncing wheels
             if self.state == 'idle':
@@ -212,7 +215,7 @@ class Boss:
                     self.attack_timer = 60
             elif self.state == 'whipping':
                 if self.state_timer == 5:
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 12, 0, 'fireball'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, dir_to_player * 12, 0, 'fireball', owner='enemy'))
 
         elif self.type == 'haring_ibon': # 10. Haring Ibon: Sky Dive
             self.vel_y = 0
@@ -234,7 +237,7 @@ class Boss:
                     self.vel_y = -10
                     sounds.play('stomp')
                     for i in range(-3, 4):
-                         if i != 0: projectiles.append(Projectile(self.rect.centerx, self.rect.bottom, i*3, -15, 'fireball'))
+                         if i != 0: projectiles.append(Projectile(self.rect.centerx, self.rect.bottom, i*3, -15, 'fireball', owner='enemy'))
 
         # Generic bounds check just in case
         if self.rect.left < self.arena_left: self.rect.left = self.arena_left; self.vx = abs(self.vx)

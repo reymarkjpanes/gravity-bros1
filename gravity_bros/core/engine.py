@@ -604,6 +604,7 @@ class GameEngine:
                         
                 alive_players = [player] if not player.dead else []
                 if not player.dead:
+                    player.is_immortal = is_immortal
                     apply_skill_buffs(player, self.unlocked_skills)
                     effects = player.update(platforms, enemies, bosses, blocks, coins, gems, stars_col, power_ups, is_immortal, particles, projectiles, HEIGHT)
                     
@@ -619,7 +620,7 @@ class GameEngine:
                         hit_stop = max(hit_stop, effects['hit_stop'])
                     
                 for e in enemies[:]: 
-                    e.update(platforms, blocks)
+                    e.update(platforms, blocks, projectiles, [player])
                     if e.dead:
                         if not player.on_ground:
                             player.combo_kills += 1
@@ -674,10 +675,10 @@ class GameEngine:
                     active_pet.update(player, enemies, coins)
                 
                 for p in projectiles[:]:
-                    p.update(platforms, blocks, enemies, bosses)
+                    p.update(platforms, blocks, enemies, bosses, player)
                     if p.dead:
                         # Spawn damage number where projectile died
-                        if p.damage > 0:
+                        if p.damage > 0 and getattr(p, 'owner', 'player') == 'player':
                             dmg_numbers.spawn(p.rect.centerx, p.rect.top, p.damage)
                         projectiles.remove(p)
                 

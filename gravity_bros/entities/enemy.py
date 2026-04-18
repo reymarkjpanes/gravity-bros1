@@ -79,7 +79,7 @@ class Enemy:
                 if closest and md < 600:
                     from entities.items import Projectile
                     d_x = 1 if closest.rect.x > self.rect.x else -1
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, d_x * 5, 0, 'book'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, d_x * 5, 0, 'book', owner='enemy'))
 
         if self.type == 'flyer':
             self.rect.x += self.vx

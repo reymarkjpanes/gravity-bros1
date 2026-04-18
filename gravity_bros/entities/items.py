@@ -178,25 +178,71 @@ class HiddenPortal:
             pygame.draw.circle(surface, (0, 255, 255), (r.centerx, r.centery), 5)
 
 class Projectile:
-    def __init__(self, x, y, vx, vy, p_type, damage=1):
+    def __init__(self, x, y, vx, vy, p_type, damage=1, owner='player'):
         self.rect = pygame.Rect(x, y, 10, 10)
-        self.vx = vx
-        self.vy = vy
+        self.x = float(x)
+        self.y = float(y)
+        self.vx = float(vx)
+        self.vy = float(vy)
         self.type = p_type
         self.dead = False
         self.damage = damage * 5
+        self.owner = owner
+        self.bounces = 3 if p_type == 'fireball' else 0
+        self.lifetime = 300  # Max 5 seconds at 60fps
 
-    def update(self, platforms, blocks, enemies, bosses=None):
-        self.rect.x += self.vx
-        self.rect.y += self.vy
+    def update(self, platforms, blocks, enemies, bosses=None, player=None):
+        self.lifetime -= 1
+        if self.lifetime <= 0:
+            self.dead = True
+            return
 
         if self.type in ('fireball', 'grenade'):
             self.vy += 0.5
+            
+        self.x += self.vx
+        self.rect.x = int(self.x)
 
         for p in platforms + blocks:
             if self.rect.colliderect(p.rect):
                 if self.type == 'fireball':
-                    self.vy = -5
+                    # Side wall hit — bounce horizontally
+                    self.vx = -self.vx
+                    self.x += self.vx * 2
+                    self.rect.x = int(self.x)
+                    self.bounces -= 1
+                    if self.bounces < 0:
+                        self.dead = True
+                elif self.type == 'grenade':
+                    self._explode(enemies, bosses)
+                    self.dead = True
+                else:
+                    self.dead = True
+                break
+
+        if self.dead:
+            return
+
+        self.y += self.vy
+        self.rect.y = int(self.y)
+
+        for p in platforms + blocks:
+            if self.rect.colliderect(p.rect):
+                if self.type == 'fireball':
+                    if self.vy > 0:
+                        self.rect.bottom = p.rect.top
+                        self.y = float(self.rect.y)
+                        if self.vx == 0:
+                            self.dead = True
+                        elif self.bounces > 0:
+                            self.vy = -5
+                            self.bounces -= 1
+                        else:
+                            self.dead = True
+                    else:
+                        self.rect.top = p.rect.bottom
+                        self.y = float(self.rect.y)
+                        self.vy = 0
                 elif self.type == 'grenade':
                     self._explode(enemies, bosses)
                     self.dead = True
@@ -205,22 +251,36 @@ class Projectile:
                 break
 
         if not self.dead:
-            for e in enemies:
-                if not e.dead and self.rect.colliderect(e.rect):
-                    if self.type == 'grenade':
-                        self._explode(enemies, bosses)
-                    else:
-                        e.take_damage(self.damage)
+            if self.owner == 'player':
+                for e in enemies:
+                    if not e.dead and self.rect.colliderect(e.rect):
+                        if self.type == 'grenade':
+                            self._explode(enemies, bosses)
+                        else:
+                            e.take_damage(self.damage)
+                        self.dead = True
+                        break
+                        
+                if not self.dead and bosses:
+                    for b in bosses:
+                        if not b.dead and b.invincible_timer <= 0 and self.rect.colliderect(b.rect):
+                            b.health -= 1
+                            b.invincible_timer = 15
+                            self.dead = True
+                            break
+            elif self.owner == 'enemy' and player and not player.dead:
+                if self.rect.colliderect(player.rect):
+                    is_invuln = getattr(player, 'is_immortal', False) or player.is_dashing or player.invincibility_timer > 0
+                    if not is_invuln:
+                        if player.is_mounted:
+                            player.mount_hp -= 1
+                            if player.mount_hp <= 0:
+                                player.is_mounted = False
+                                player.vel_x = -15 * player.facing
+                                player.vel_y = -10
+                        else:
+                            player.die()
                     self.dead = True
-                    break
-                    
-        if not self.dead and bosses:
-            for b in bosses:
-                if not b.dead and b.invincible_timer <= 0 and self.rect.colliderect(b.rect):
-                    b.health -= 1
-                    b.invincible_timer = 15
-                    self.dead = True
-                    break
 
         if self.rect.y > 1400 or self.rect.y < -400:
             self.dead = True

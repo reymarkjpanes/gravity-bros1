@@ -63,6 +63,7 @@ class Player(pygame.sprite.Sprite):
 
         self.selected_character = 'Juan'
         self.selected_skin = 'Default'
+        self.is_immortal = False
 
         # Load sprites
         self.images = {}

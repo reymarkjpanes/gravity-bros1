@@ -12,12 +12,12 @@
     10
   ],
   "current_level": 8,
-  "score": 87450,
-  "coins": 652564,
-  "gems": 15,
-  "stars": 5,
-  "global_xp": 1780,
-  "global_level": 10,
+  "score": 147600,
+  "coins": 346999,
+  "gems": 21,
+  "stars": 8,
+  "global_xp": 7320,
+  "global_level": 17,
   "unlocked_skins": [
     "Default"
   ],
@@ -35,9 +35,10 @@
     "Malunggay",
     "Jeepney",
     "Batak",
-    "Maria"
+    "Maria",
+    "Taho"
   ],
-  "selected_character": "Aswang",
+  "selected_character": "Taho",
   "unlocked_powerups": [
     "None"
   ],
@@ -51,15 +52,23 @@
     "Aswang",
     "Malunggay",
     "Andres",
-    "Manananggal"
+    "Manananggal",
+    "Maria",
+    "LapuLapu",
+    "Taho"
   ],
   "unlocked_skills": [
     "grav_flip_speed",
     "grav_air_control",
     "combat_proj",
-    "grav_cooldown"
+    "grav_cooldown",
+    "combat_melee",
+    "combat_dash",
+    "agil_speed",
+    "agil_jump",
+    "agil_double_jump"
   ],
-  "skill_points": 2,
+  "skill_points": 1,
   "achievements_unlocked": [
     "first_blood",
     "boss_killer"

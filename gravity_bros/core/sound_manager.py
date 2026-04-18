@@ -7,9 +7,12 @@ class SoundManager:
         # Path to sounds
         self.sound_dir = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sounds')
         os.makedirs(self.sound_dir, exist_ok=True)
-        
         self.bgm_path = os.path.join(self.sound_dir, 'bgm.wav')
-        
+        self._initialized = False
+
+    def _init_sounds(self):
+        if self._initialized: return
+        self._initialized = True
         files = {
             'jump':  'jump.wav',  'coin':  'coin.wav',
             'stomp': 'stomp.wav', 'bump':  'bump.wav',  'die': 'die.wav',
@@ -19,9 +22,10 @@ class SoundManager:
                 self.sounds[name] = pygame.mixer.Sound(os.path.join(self.sound_dir, fname))
                 self.sounds[name].set_volume(0.3)
             except Exception as e:
-                print(f"Error loading {name}: {e}")
+                pass # Print skipped to avoid console spam if not generated yet
 
     def play(self, name: str):
+        self._init_sounds()
         if name in self.sounds and self.sounds[name]:
             self.sounds[name].play()
 
