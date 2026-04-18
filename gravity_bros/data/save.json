@@ -1,15 +1,17 @@
 {
   "unlocked_levels": [
     1,
-    2
+    2,
+    3,
+    4
   ],
-  "current_level": 2,
-  "score": 6200,
-  "coins": 1088552,
-  "gems": 0,
+  "current_level": 4,
+  "score": 20800,
+  "coins": 967163,
+  "gems": 3,
   "stars": 0,
-  "global_xp": 620,
-  "global_level": 1,
+  "global_xp": 1150,
+  "global_level": 3,
   "unlocked_skins": [
     "Default"
   ],
@@ -18,9 +20,15 @@
     "Juan",
     "Manananggal",
     "LapuLapu",
-    "Sorbetero"
+    "Sorbetero",
+    "Aswang",
+    "Tikbalang",
+    "Jose",
+    "Andres",
+    "Kapre",
+    "Malunggay"
   ],
-  "selected_character": "Sorbetero",
+  "selected_character": "LapuLapu",
   "unlocked_powerups": [
     "None"
   ],
@@ -30,7 +38,12 @@
   ],
   "selected_pet": "None",
   "unlocked_upgrades": [],
-  "unlocked_evolutions": [],
+  "unlocked_evolutions": [
+    "Aswang"
+  ],
   "unlocked_skills": [],
-  "skill_points": 0
+  "skill_points": 2,
+  "achievements_unlocked": [
+    "first_blood"
+  ]
 }

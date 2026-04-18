@@ -12,9 +12,11 @@ from ui.menu import draw_main_menu, draw_level_select, draw_mission_briefing
 from ui.store import draw_store
 from ui.hud import draw_hud, draw_minimap, draw_pause_menu, draw_game_over, draw_level_cleared
 from ui.skill_tree import draw_skill_tree, apply_skill_buffs, SKILLS
+from ui.skill_info import draw_skill_info, get_skill_flash_info, CHARACTER_ORDER
 from ui.cheat_menu import CheatMenu
 from entities.player import Player
 from entities.items import Projectile, Particle
+from ui.achievements import AchievementManager
 
 class GameEngine:
     def __init__(self):
@@ -76,10 +78,30 @@ class GameEngine:
             self.unlocked_evolutions = saved_data.get('unlocked_evolutions', [])
             self.unlocked_skills = saved_data.get('unlocked_skills', [])
             self.skill_points = saved_data.get('skill_points', 0)
+            self.achievements_unlocked = saved_data.get('achievements_unlocked', [])
+            
+        if not hasattr(self, 'achievements_unlocked'):
+            self.achievements_unlocked = []
+
+        self.achievements = AchievementManager()
+        self.achievements.load(self.achievements_unlocked)
 
         self.mm_selection = 0
         self.store_tab = 0
         self.store_selection = 0
+        
+        from ui.transitions import Transition
+        self.transition = Transition()
+        self.pending_state = None
+        self.break_loop_flag = False
+
+    def trigger_transition(self, next_state, effect='fade'):
+        self.pending_state = next_state
+        self.transition.start(effect, duration=40, on_midpoint=self._transition_midpoint)
+        
+    def _transition_midpoint(self):
+        self.app_state = self.pending_state
+        self.break_loop_flag = True
         
     def _save_current_state(self):
         save_game({
@@ -102,12 +124,14 @@ class GameEngine:
             'unlocked_upgrades': self.unlocked_upgrades,
             'unlocked_evolutions': self.unlocked_evolutions,
             'unlocked_skills': self.unlocked_skills,
-            'skill_points': self.skill_points
+            'skill_points': self.skill_points,
+            'achievements_unlocked': self.achievements.unlocked
         })
 
     def run(self):
         while True:
-            if self.app_state in ['MAIN_MENU', 'LEVEL_SELECT', 'STORE', 'MISSION_BRIEFING', 'MODES', 'SETTINGS', 'SKILL_TREE']:
+            self.break_loop_flag = False  # Reset break flag at loop boundary
+            if self.app_state in ['MAIN_MENU','LEVEL_SELECT','STORE','MISSION_BRIEFING','MODES','SETTINGS','SKILL_TREE','SKILL_CODEX']:
                 self.run_menu()
             elif self.app_state == 'GAME':
                 self.run_game(game_mode='STORY')
@@ -121,6 +145,9 @@ class GameEngine:
     def run_menu(self):
         in_menu = True
         while in_menu:
+            if self.break_loop_flag:
+                break
+                
             if self.app_state == 'MAIN_MENU':
                 draw_main_menu(self.screen, self.font, self.big_font, self.mm_selection)
             elif self.app_state == 'LEVEL_SELECT':
@@ -157,6 +184,16 @@ class GameEngine:
             elif self.app_state == 'SKILL_TREE':
                 if not hasattr(self, 'st_selection'): self.st_selection = 0
                 draw_skill_tree(self.screen, self.font, self.big_font, self.unlocked_skills, self.skill_points, self.st_selection)
+            elif self.app_state == 'SKILL_CODEX':
+                if not hasattr(self, 'codex_idx'): self.codex_idx = 0
+                draw_skill_info(self.screen, self.font, self.big_font, self.codex_idx)
+
+            if self.transition.active:
+                self.transition.update()
+                self.transition.draw(self.screen)
+
+            self.achievements.update()
+            self.achievements.draw(self.screen)
 
             pygame.display.flip()
             
@@ -187,19 +224,25 @@ class GameEngine:
                         elif event.key == pygame.K_DOWN: self.mode_selection = min(ops_count, self.mode_selection + 1); sounds.play('jump')
                         elif event.key == pygame.K_RETURN:
                             if self.app_state == 'MODES':
-                                if self.mode_selection == ops_count: self.app_state = 'MAIN_MENU'
+                                if self.mode_selection == ops_count: self.trigger_transition('MAIN_MENU', 'fade')
                                 elif self.mode_selection == 0: 
-                                    self._save_current_state(); self.app_state = 'GAME_ENDLESS'; return
+                                    self._save_current_state(); self.trigger_transition('GAME_ENDLESS', 'iris')
                                 elif self.mode_selection == 1: 
-                                    self._save_current_state(); self.app_state = 'GAME_TIME_ATTACK'; return
+                                    self._save_current_state(); self.trigger_transition('GAME_TIME_ATTACK', 'iris')
                                 elif self.mode_selection == 2:
-                                    self._save_current_state(); self.app_state = 'GAME_BOSS_RUSH'; return
+                                    self._save_current_state(); self.trigger_transition('GAME_BOSS_RUSH', 'iris')
                             elif self.app_state == 'SETTINGS':
-                                if self.mode_selection == ops_count: self.app_state = 'MAIN_MENU'
+                                if self.mode_selection == ops_count: self.trigger_transition('MAIN_MENU', 'fade')
                     
                     elif self.app_state == 'LEVEL_SELECT':
                         if event.key == pygame.K_s: self.app_state = 'STORE'
                         elif event.key == pygame.K_x: self.app_state = 'SKILL_TREE'; self.st_selection = 0
+                        elif event.key == pygame.K_z:
+                            self.app_state = 'SKILL_CODEX'
+                            if not hasattr(self, 'codex_idx'): self.codex_idx = 0
+                            # Pre-select current character if possible
+                            ch = self.selected_character
+                            if ch in CHARACTER_ORDER: self.codex_idx = CHARACTER_ORDER.index(ch)
                         elif event.key == pygame.K_ESCAPE: self.app_state = 'MAIN_MENU'
                         elif event.key == pygame.K_LEFT: self.selected_level = max(1, self.selected_level - 1)
                         elif event.key == pygame.K_RIGHT: self.selected_level = min(10, self.selected_level + 1)
@@ -211,15 +254,26 @@ class GameEngine:
                         elif event.key == pygame.K_RETURN:
                             if self.selected_level in self.unlocked_levels:
                                 self._save_current_state()
-                                self.app_state = 'MISSION_BRIEFING'
+                                self.trigger_transition('MISSION_BRIEFING', 'diamond')
                                 
                     elif self.app_state == 'MISSION_BRIEFING':
                         if event.key == pygame.K_RETURN:
-                            self.app_state = 'GAME'
-                            in_menu = False
+                            self.trigger_transition('GAME', 'iris')
                         elif event.key == pygame.K_ESCAPE:
-                            self.app_state = 'LEVEL_SELECT'
+                            self.trigger_transition('LEVEL_SELECT', 'fade')
                             
+                    elif self.app_state == 'SKILL_CODEX':
+                        if not hasattr(self, 'codex_idx'): self.codex_idx = 0
+                        n = len(CHARACTER_ORDER)
+                        if event.key == pygame.K_ESCAPE: self.app_state = 'LEVEL_SELECT'
+                        elif event.key == pygame.K_LEFT:
+                            self.codex_idx = (self.codex_idx - 1) % n; sounds.play('jump')
+                        elif event.key == pygame.K_RIGHT:
+                            self.codex_idx = (self.codex_idx + 1) % n; sounds.play('jump')
+                        elif event.key == pygame.K_a:
+                            self.codex_idx = (self.codex_idx - 1) % n
+                        elif event.key == pygame.K_d:
+                            self.codex_idx = (self.codex_idx + 1) % n
                     elif self.app_state == 'SKILL_TREE':
                         if not hasattr(self, 'st_selection'): self.st_selection = 0
                         if event.key == pygame.K_ESCAPE: self.app_state = 'LEVEL_SELECT'
@@ -350,11 +404,24 @@ class GameEngine:
         if w_rand > 0.8: weather = 'thunder'
         elif w_rand > 0.5: weather = 'rain'
         
-        skill_cutscene_timer = 0
-        cutscene_art = None
+        skill_flash_timer = 0
+        skill_flash_name = ''
+        skill_flash_color = (255, 215, 0)
+
+        # ── Phase 1 systems ──
+        from ui.skill_cutin import SkillCutIn
+        from ui.damage_numbers import DamageNumberManager
+        from ui.boss_intro import BossIntro
+        skill_cutin = SkillCutIn()
+        dmg_numbers = DamageNumberManager()
+        boss_intro = BossIntro()
+        boss_intro_triggered = False
         
         running = True
         while running:
+            if self.break_loop_flag:
+                break
+                
             time = pygame.time.get_ticks()
             
             for event in pygame.event.get():
@@ -368,8 +435,7 @@ class GameEngine:
                     # ---- PAUSED STATE KEYS ----
                     if is_paused:
                         if event.key == pygame.K_q:
-                            self.app_state = 'MAIN_MENU'
-                            return
+                            self.trigger_transition('MAIN_MENU', 'fade')
                         if event.key == pygame.K_p or event.key == pygame.K_ESCAPE:
                             is_paused = False
                         continue  # Block all other keys while paused
@@ -387,9 +453,6 @@ class GameEngine:
                         player.invincibility_timer = 120
                         screen_shake = 10
                     
-                    if event.key == pygame.K_1: weapon = 'fireball'
-                    if event.key == pygame.K_2: weapon = 'gun'
-                    if event.key == pygame.K_3: weapon = 'grenade'
                     
                     if event.key == pygame.K_c:
                         cheat_menu.active = not cheat_menu.active
@@ -412,18 +475,11 @@ class GameEngine:
                         if player.ability_cooldown <= 0:
                             success = player.trigger_skill(particles, projectiles, enemies, bosses)
                             if success:
-                                skill_cutscene_timer = 60 # 1 second cut-in
-                                import os, glob
-                                c_path = os.path.join(os.path.dirname(__file__), '..', 'concept_art', f"{player.selected_character.lower()}_concept_*.png")
-                                matches = glob.glob(c_path)
-                                cutscene_art = None
-                                if matches:
-                                    try:
-                                        img = pygame.image.load(matches[0]).convert_alpha()
-                                        w, h = img.get_size()
-                                        ratio = (HEIGHT * 0.8) / h
-                                        cutscene_art = pygame.transform.smoothscale(img, (int(w * ratio), int(h * ratio)))
-                                    except: pass
+                                # Skill flash text
+                                skill_flash_name, skill_flash_color = get_skill_flash_info(player.selected_character)
+                                skill_flash_timer = 150
+                                # Tekken-style cut-in
+                                skill_cutin.start(player.selected_character)
                             
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_g:
@@ -469,10 +525,9 @@ class GameEngine:
             if keys[pygame.K_f] and not player.dead:
                 if not f_pressed:
                     f_pressed = True
-                    sounds.play('jump')
-                    vx = player.facing * 10; vy = 0
-                    if weapon == 'grenade': vx = player.facing * 8; vy = -8 * player.gravity_dir
-                    projectiles.append(Projectile(player.rect.centerx, player.rect.centery, vx, vy, weapon))
+                    result = player.basic_attack(projectiles, particles, enemies)
+                    if result:
+                        sounds.play('jump')
             else:
                 f_pressed = False
 
@@ -480,9 +535,10 @@ class GameEngine:
             all_bosses_defeated = (len(bosses) == 0) or all(b.dead for b in bosses)
 
             # Update Logic
-            if skill_cutscene_timer > 0:
-                skill_cutscene_timer -= 1
-                if skill_cutscene_timer == 0: screen_shake = 15 # Screen shakes heavy on cast exit!
+            if skill_cutin.active:
+                skill_cutin.update()
+            elif boss_intro.active:
+                boss_intro.update()
             elif hit_stop > 0:
                 hit_stop -= 1
             elif level_complete:
@@ -505,12 +561,15 @@ class GameEngine:
                         self.skill_points += 1  # Earn 1 Skill Point per global level-up!
                         
                     self._save_current_state()
-                    self.app_state = 'LEVEL_SELECT'
-                    return
+                    self.trigger_transition('LEVEL_SELECT', 'diamond')
             else:
                 if len(bosses) > 0 and not boss_dialogue_triggered and not player.dead:
-                    if bosses[0].rect.x - player.rect.x < WIDTH: # Boss is on screen
+                    if bosses[0].rect.x - player.rect.x < WIDTH:  # Boss is on screen
                         boss_dialogue_triggered = True
+                        # Trigger boss intro cinematic
+                        if not boss_intro_triggered:
+                            boss_intro_triggered = True
+                            boss_intro.start(bosses[0])
                         dialogue.trigger(bosses[0].type, "You dare approach my domain? You will perish!", 'right')
                         dialogue.trigger(player.selected_character, "I don't think so. I'm taking you down!", 'left')
                         
@@ -532,20 +591,42 @@ class GameEngine:
                     
                 for e in enemies[:]: 
                     e.update(platforms, blocks)
-                    if e.dead: enemies.remove(e)
+                    if e.dead:
+                        if not player.on_ground:
+                            player.combo_kills += 1
+                            player.combo_timer = 120
+                            
+                        # Calculate combo multiplier
+                        mult = 1.0
+                        if player.combo_kills >= 10: mult = 3.0
+                        elif player.combo_kills >= 6: mult = 2.0
+                        elif player.combo_kills >= 3: mult = 1.5
+                        
+                        score_gain = int(100 * mult)
+                        player.score += score_gain
+                        player.level_score += score_gain
+                        
+                        dmg_numbers.spawn(e.rect.centerx, e.rect.top - 10, e.max_hp)
+                        enemies.remove(e)
+                        self.achievements.unlock('first_blood')
+                        if player.combo_kills >= 10:
+                            self.achievements.unlock('combo_10')
                 for b in bosses: 
                     pre_health = b.health
                     was_dead = b.dead
                     b.update(platforms, blocks, player, enemies, projectiles)
                     if b.health < pre_health:
                         screen_shake = max(screen_shake, 5)
-                        hit_stop = max(hit_stop, 3) # Freeze frame on boss hit
+                        hit_stop = max(hit_stop, 3)
+                        dmg_numbers.spawn(b.rect.centerx, b.rect.top, pre_health - b.health, 'boss')
                     if b.dead and not was_dead:
+                        self.achievements.unlock('boss_killer')
                         # Boss just died! Big explosion party!
                         player.score += 5000
                         player.coins += 50
                         screen_shake = 25
                         hit_stop = 20
+                        dmg_numbers.spawn(b.rect.centerx, b.rect.top - 20, 5000, 'normal')
                         for _ in range(60):
                             particles.append(Particle(b.rect.centerx, b.rect.centery, (255, random.randint(50,200), 0)))
                             particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 255, 255), 8))
@@ -559,11 +640,16 @@ class GameEngine:
                 
                 for p in projectiles[:]:
                     p.update(platforms, blocks, enemies, bosses)
-                    if p.dead: projectiles.remove(p)
+                    if p.dead:
+                        # Spawn damage number where projectile died
+                        if p.damage > 0:
+                            dmg_numbers.spawn(p.rect.centerx, p.rect.top, p.damage)
+                        projectiles.remove(p)
                 
                 for p in particles[:]:
                     p.update()
                     if p.life <= 0: particles.remove(p)
+                dmg_numbers.update()
                 
                 for cp in checkpoints:
                     if not player.dead and player.rect.colliderect(cp.rect) and not cp.active:
@@ -588,7 +674,10 @@ class GameEngine:
                     level_complete_timer = 120
 
             # Render
+            # Camera with boss intro override
             camera_x = max(0, player.rect.x - WIDTH // 2)
+            if boss_intro.active:
+                camera_x = boss_intro.get_camera_override(camera_x)
 
             theme = get_theme(self.selected_level)
             
@@ -599,39 +688,29 @@ class GameEngine:
             else:
                 shake_x, shake_y = 0, 0
                 
-            self.screen.fill(theme['sky'])
-            
-            # Parallax
-            for sx, sy in stars_bg:
-                alpha = int(128 + math.sin(time / 300.0 + sx) * 127)
-                star_surf = pygame.Surface((2, 2), pygame.SRCALPHA)
-                star_surf.fill((255, 255, 255, alpha))
-                self.screen.blit(star_surf, ((sx - camera_x * 0.05) % WIDTH, sy))
-                
-            for layer, color, spacing, speed, y_off in [(1, (255,255,255), 400, 0.15, 100), (2, theme['bg1'], 600, 0.3, 400), (3, theme['bg2'], 400, 0.45, 450)]:
-                p_off = -camera_x * speed
-                for i in range(-1, WIDTH // spacing + 2):
-                    mx = (i * spacing + p_off) % (WIDTH + spacing) - spacing
-                    if layer == 1:
-                        pygame.draw.rect(self.screen, color, (mx + 100, y_off, 60, 20))
-                        pygame.draw.rect(self.screen, color, (mx + 120, y_off - 20, 40, 40))
-                    else:
-                        pygame.draw.polygon(self.screen, color, [(mx + spacing//2, y_off), (mx + spacing//2 + 50, y_off-150), (mx + spacing//2 + 100, y_off)])
-    
+            # ── Rich procedural background ──
+            from levels.backgrounds import draw_background
+            draw_background(self.screen, self.selected_level, camera_x, time)
+
+            # Weather effects and Dynamic Background Tints overlay
+            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             if weather == 'rain':
-                for _ in range(5):
+                overlay.fill((10, 20, 50, 100)) # Dark blue-grey tint for rain
+                self.screen.blit(overlay, (0, 0))
+                for _ in range(8):
                     rx = random.randint(0, WIDTH)
-                    ry = random.randint(100, HEIGHT)
-                    pygame.draw.line(self.screen, (100, 150, 255), (rx, ry), (rx - 2, ry + 15), 1)
+                    ry = random.randint(50, HEIGHT)
+                    pygame.draw.line(self.screen, (100, 150, 255, 180), (rx, ry), (rx - 3, ry + 25), 1)
             elif weather == 'thunder':
-                if random.random() > 0.98:
-                    flash = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-                    flash.fill((255, 255, 255, random.randint(50, 150)))
-                    self.screen.blit(flash, (0, 0))
-    
-            s = pygame.Surface((WIDTH, 30), pygame.SRCALPHA)
-            s.fill((*theme['water'], 200)) # Alpha
-            self.screen.blit(s, (0, HEIGHT - 30))
+                if random.random() > 0.95:
+                    overlay.fill((255, 255, 255, random.randint(80, 180))) # Bright lightning flash
+                else:
+                    overlay.fill((30, 30, 40, 120)) # Dark stormy tint
+                self.screen.blit(overlay, (0, 0))
+            else:
+                # 'clear' weather: Maybe slightly warm tint
+                overlay.fill((255, 200, 100, 15)) # Very subtle warm sunlight
+                self.screen.blit(overlay, (0, 0))
 
             for s in scenery: s.draw(self.screen, camera_x, time)
             for hz in hazards: hz.draw(self.screen, camera_x, theme)
@@ -654,7 +733,27 @@ class GameEngine:
             
             draw_minimap(self.screen, platforms, player, bosses, portal, self.selected_level)
             draw_hud(self.screen, self.font, self.big_font, player, theme, self.selected_level, weapon, bosses)
-            
+
+            # ── Skill Name Flash ──
+            if skill_flash_timer > 0:
+                skill_flash_timer -= 1
+                alpha = min(255, skill_flash_timer * 4)
+                scale = 1.0 + 0.3 * max(0, (skill_flash_timer - 120) / 30.0)
+                flash_surf = self.big_font.render(skill_flash_name or '', True, skill_flash_color or GOLD)
+                if scale != 1.0:
+                    w = int(flash_surf.get_width() * scale)
+                    h = int(flash_surf.get_height() * scale)
+                    flash_surf = pygame.transform.smoothscale(flash_surf, (max(1,w), max(1,h)))
+                flash_surf.set_alpha(alpha)
+                fx = WIDTH // 2 - flash_surf.get_width() // 2
+                fy = player.rect.y - camera_x // 10 - 90  # Float above player roughly
+                fy = max(85, min(HEIGHT - 120, fy))
+                # Glow bar behind text
+                gbar = pygame.Surface((flash_surf.get_width() + 30, flash_surf.get_height() + 10), pygame.SRCALPHA)
+                gbar.fill((*((skill_flash_color or GOLD)), min(80, alpha // 2)))
+                self.screen.blit(gbar, (fx - 15, fy - 5))
+                self.screen.blit(flash_surf, (fx, fy))
+
             if game_mode == 'TIME_ATTACK':
                 c = RED if game_timer < 10*FPS else GOLD
                 t_txt = self.big_font.render(f"TIME: {game_timer // FPS}", True, c)
@@ -668,36 +767,35 @@ class GameEngine:
             # Apply shaking offset if needed
             if shake_x != 0 or shake_y != 0:
                 temp_surface = self.screen.copy()
-                self.screen.fill(theme['sky'])
+                self.screen.fill((0, 0, 0))
                 self.screen.blit(temp_surface, (shake_x, shake_y))
     
             if player.dead: draw_game_over(self.screen, self.font, self.big_font)
             if level_complete: draw_level_cleared(self.screen, self.font, self.big_font, self.selected_level)
 
-            # Draw Dialogues here if they somehow triggered during rendering
-            dialogue.draw(self.screen)
+            if game_mode == 'ENDLESS':
+                if player.rect.x >= 500000:  # 5000m
+                    self.achievements.unlock('pacifist')
+                    
+            if self.total_coins >= 1000000:
+                self.achievements.unlock('millionaire')
 
-            if skill_cutscene_timer > 0:
-                # Black overlay
-                s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-                s.fill((0, 0, 0, 180 + int(math.sin(skill_cutscene_timer) * 50)))
-                self.screen.blit(s, (0, 0))
-                
-                if cutscene_art:
-                    # Slide from left
-                    t = 60 - skill_cutscene_timer
-                    x_pos = (t * 20) - 200
-                    # Draw glow
-                    c_color = GOLD if getattr(player, 'is_evolved', False) else (0, 150, 255)
-                    pygame.draw.rect(self.screen, c_color, (0, HEIGHT//2 - 150, WIDTH, 300))
-                    pygame.draw.rect(self.screen, (0, 0, 0), (0, HEIGHT//2 - 145, WIDTH, 290))
-                    
-                    # We crop green background by setting transparency since it's an unmodified concept image
-                    # But actually pygame image convert might preserve green, wait to see if it looks fine.
-                    self.screen.blit(cutscene_art, (x_pos, HEIGHT//2 - cutscene_art.get_height()//2))
-                    
-                    sk_text = self.big_font.render(player.selected_character.upper() + " SUPER ART!", True, c_color)
-                    self.screen.blit(sk_text, (WIDTH - t*15, HEIGHT//2 + 80))
+            self.achievements.update()
+            
+            # ── Damage numbers (always on top of game, under UI overlays) ──
+            dmg_numbers.draw(self.screen, camera_x)
+
+            # ── Boss intro cinematic ──
+            boss_intro.draw(self.screen)
+
+            # ── Skill cut-in (Tekken style — on top of everything) ──
+            skill_cutin.draw(self.screen)
+
+            if self.transition.active:
+                self.transition.update()
+                self.transition.draw(self.screen)
+
+            self.achievements.draw(self.screen)
 
             pygame.display.flip()
             self.clock.tick(FPS)

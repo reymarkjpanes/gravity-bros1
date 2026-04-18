@@ -15,6 +15,18 @@ class Enemy:
         self.start_y = y
         self.jump_timer = random.randint(50, 100)
         self.stun_timer = 0
+        self.hit_flash = 0  # white flash frames on damage
+
+        # HP per enemy type
+        BASE_HP = {'walker': 10, 'hopper': 10, 'archer': 15,
+                   'shielded': 20, 'flyer': 10, 'kapre': 25,
+                   'igorot': 15, 'carabao': 20}
+        base = BASE_HP.get(type, 10)
+        if difficulty == 'easy':  base = max(5, int(base * 0.7))
+        elif difficulty == 'hard': base = int(base * 1.5)
+        self.max_hp = base
+        self.hp = base
+
         if type == 'flyer':
             self.vx = -1.5 * speed_mult
         elif type == 'archer':
@@ -32,6 +44,21 @@ class Enemy:
                     path = os.path.join(assets_dir, f'enemy_{e_type}_{d}.png')
                 if os.path.exists(path):
                     self.images[f'{e_type}_{d}'] = pygame.image.load(path).convert_alpha()
+
+    def take_damage(self, amount=1):
+        """Deal damage, handle shield, trigger death."""
+        if self.dead: return
+        # Shielded enemy absorbs hits with its shield first
+        if self.type == 'shielded' and getattr(self, 'shield_hp', 0) > 0:
+            self.shield_hp -= amount
+            if self.shield_hp <= 0:
+                self.shield_hp = 0
+            self.hit_flash = 6
+            return
+        self.hp -= amount
+        self.hit_flash = 8
+        if self.hp <= 0:
+            self.dead = True
 
     def update(self, platforms, blocks, projectiles=None, players=None):
         if self.dead or self.type == 'stunned': return
@@ -100,18 +127,41 @@ class Enemy:
 
     def draw(self, surface, time, camera_x):
         if self.dead: return
-        
+
+        # Tick hit flash
+        if self.hit_flash > 0:
+            self.hit_flash -= 1
+
         dir_key = 'right' if self.vx > 0 else 'left'
         img_key = f"{self.type}_{dir_key}"
-        
+        draw_x = self.rect.x - camera_x
+
         img = self.images.get(img_key)
         if img:
-            surface.blit(img, (self.rect.x - camera_x, self.rect.y))
+            if self.hit_flash > 0:
+                # White overlay on damaged enemy
+                flash = img.copy()
+                flash.fill((255, 255, 255, 200), special_flags=pygame.BLEND_RGBA_MULT)
+                surface.blit(img, (draw_x, self.rect.y))
+                surface.blit(flash, (draw_x, self.rect.y))
+            else:
+                surface.blit(img, (draw_x, self.rect.y))
         else:
-            c = (139, 69, 19)
-            if self.type == 'shielded': c = (100, 100, 150)
-            elif self.type == 'archer': c = (100, 150, 100)
-            pygame.draw.rect(surface, c, (self.rect.x - camera_x, self.rect.y, 24, 24))
-            
-        if self.type == 'shielded':
-            pygame.draw.rect(surface, (200, 200, 200), (self.rect.x - camera_x - 4, self.rect.y, 8, 24))
+            c = (255, 255, 255) if self.hit_flash > 0 else (139, 69, 19)
+            if not self.hit_flash:
+                if self.type == 'shielded': c = (100, 100, 150)
+                elif self.type == 'archer': c = (100, 150, 100)
+            pygame.draw.rect(surface, c, (draw_x, self.rect.y, 24, 24))
+
+        if self.type == 'shielded' and getattr(self, 'shield_hp', 0) > 0:
+            pygame.draw.rect(surface, (200, 200, 200), (draw_x - 4, self.rect.y, 8, 24))
+
+        # HP bar (only if damaged and has more than 1 max HP)
+        if self.max_hp > 1 and self.hp < self.max_hp and not self.dead:
+            bar_w = 24
+            filled = int(bar_w * (self.hp / self.max_hp))
+            bar_y = self.rect.y - 6
+            pygame.draw.rect(surface, (180, 0, 0),   (draw_x, bar_y, bar_w, 4))
+            pygame.draw.rect(surface, (0, 220, 0),   (draw_x, bar_y, filled, 4))
+            pygame.draw.rect(surface, (255,255,255), (draw_x, bar_y, bar_w, 4), 1)
+

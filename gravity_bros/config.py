@@ -1,7 +1,7 @@
 # gravity_bros/config.py
 # All constants for Gravity Bros: Philippine Adventure
 
-WIDTH, HEIGHT = 800, 600
+WIDTH, HEIGHT = 1067, 600
 FPS = 60
 
 # --- Colors ---

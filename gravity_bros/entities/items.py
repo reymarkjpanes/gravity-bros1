@@ -178,12 +178,13 @@ class HiddenPortal:
             pygame.draw.circle(surface, (0, 255, 255), (r.centerx, r.centery), 5)
 
 class Projectile:
-    def __init__(self, x, y, vx, vy, p_type):
+    def __init__(self, x, y, vx, vy, p_type, damage=1):
         self.rect = pygame.Rect(x, y, 10, 10)
         self.vx = vx
         self.vy = vy
         self.type = p_type
         self.dead = False
+        self.damage = damage * 5
 
     def update(self, platforms, blocks, enemies, bosses=None):
         self.rect.x += self.vx
@@ -209,7 +210,7 @@ class Projectile:
                     if self.type == 'grenade':
                         self._explode(enemies, bosses)
                     else:
-                        e.dead = True
+                        e.take_damage(self.damage)
                     self.dead = True
                     break
                     
@@ -231,7 +232,7 @@ class Projectile:
                 dist = _m.hypot(e.rect.centerx - self.rect.centerx,
                                 e.rect.centery - self.rect.centery)
                 if dist < 150:
-                    e.dead = True
+                    e.take_damage(max(1, self.damage))
         if bosses:
             for b in bosses:
                 if not b.dead:
@@ -244,8 +245,10 @@ class Projectile:
     def draw(self, surface, camera_x):
         r = self.rect.copy()
         r.x -= camera_x
+        # ── Generic weapons (kept for boss/skill projectiles) ──
         if self.type == 'fireball':
             pygame.draw.ellipse(surface, (255, 69, 0), r)
+            pygame.draw.ellipse(surface, (255, 200, 0), r.inflate(-4, -4))
         elif self.type == 'gun':
             pygame.draw.rect(surface, (255, 255, 0), (r.x, r.y + 3, 10, 4))
         elif self.type == 'grenade':
@@ -253,6 +256,67 @@ class Projectile:
         elif self.type == 'book':
             pygame.draw.rect(surface, (139, 69, 19), (r.x, r.y, 14, 18))
             pygame.draw.rect(surface, (200, 200, 200), (r.x + 2, r.y + 2, 10, 14))
+        # ── Character basic attacks ──
+        elif self.type == 'guava':
+            # Juan — ripe guava (green-yellow round fruit)
+            pygame.draw.circle(surface, (180, 220, 80), r.center, 7)
+            pygame.draw.circle(surface, (140, 190, 50), r.center, 7, 2)
+        elif self.type == 'kris':
+            # Lapu-Lapu — wavy kris blade (gold)
+            pygame.draw.polygon(surface, (255, 200, 0), [
+                (r.x, r.centery), (r.x+5, r.centery-4),
+                (r.x+10, r.centery), (r.x+15, r.centery+4), (r.x+20, r.centery)
+            ])
+        elif self.type == 'quill':
+            # Jose Rizal — ink quill (dark blue thin bolt)
+            pygame.draw.line(surface, (30, 50, 200), (r.x, r.centery), (r.x+18, r.centery), 3)
+            pygame.draw.polygon(surface, (200, 220, 255), [
+                (r.x+18, r.centery-3), (r.x+18, r.centery+3), (r.x+24, r.centery)
+            ])
+        elif self.type == 'dart':
+            # Batak — thin poison dart (green needle)
+            pygame.draw.line(surface, (0, 160, 30), (r.x, r.centery), (r.x+14, r.centery), 2)
+            pygame.draw.polygon(surface, (0, 220, 50), [
+                (r.x+14, r.centery-2), (r.x+14, r.centery+2), (r.x+20, r.centery)
+            ])
+        elif self.type == 'spear':
+            # Datu — heavy tribal spear (brown with dark tip)
+            pygame.draw.rect(surface, (120, 70, 30), (r.x, r.centery-2, 22, 4))
+            pygame.draw.polygon(surface, (60, 60, 60), [
+                (r.x+22, r.centery-4), (r.x+22, r.centery+4), (r.x+30, r.centery)
+            ])
+        elif self.type == 'ember':
+            # Kapre — glowing cigar ember (orange + red glow)
+            pygame.draw.circle(surface, (255, 80, 0), r.center, 6)
+            pygame.draw.circle(surface, (255, 180, 0), r.center, 3)
+        elif self.type == 'scoop':
+            # Sorbetero — ice cream scoop (white/pink ball)
+            pygame.draw.circle(surface, (255, 200, 220), r.center, 7)
+            pygame.draw.circle(surface, (200, 150, 180), r.center, 7, 2)
+        elif self.type == 'leaf':
+            # Malunggay — small green leaf cluster
+            pygame.draw.ellipse(surface, (0, 180, 40), (r.x, r.y, 12, 8))
+            pygame.draw.ellipse(surface, (0, 220, 60), (r.x+2, r.y+1, 8, 5))
+        elif self.type == 'tongue':
+            # Aswang — pink elongated tongue
+            pygame.draw.ellipse(surface, (220, 60, 80), (r.x, r.centery-4, 20, 8))
+            pygame.draw.circle(surface, (180, 20, 50), (r.x+20, r.centery), 4)
+        elif self.type == 'tongue_long':
+            # Aswang unique skill — long red pulsing tongue
+            pygame.draw.ellipse(surface, (200, 20, 50), (r.x, r.centery-5, 30, 10))
+            pygame.draw.circle(surface, (255, 80, 100), (r.x+30, r.centery), 6)
+        elif self.type == 'taho':
+            # Taho — splash of brown syrup
+            pygame.draw.ellipse(surface, (160, 90, 20), (r.x, r.y, 12, 8))
+        elif self.type == 'fan_petal':
+            # Maria — delicate pink petal
+            pygame.draw.ellipse(surface, (255, 150, 180), (r.x, r.y, 10, 6))
+        elif self.type == 'hoof':
+            # Tikbalang — dark horseshoe shape
+            pygame.draw.arc(surface, (50, 30, 10), (r.x, r.y, 16, 12), 0, math.pi, 4)
+        elif self.type == 'honk':
+            # Jeepney — bright yellow shockwave ring
+            pygame.draw.circle(surface, (255, 220, 0), r.center, 10, 3)
 
 class Scenery:
     def __init__(self, x, y, type_name):
@@ -369,7 +433,7 @@ class Pet:
             if pygame.time.get_ticks() % 120 == 0:
                 for e in enemies:
                     if not e.dead and _m.hypot(e.rect.centerx - self.x, e.rect.centery - self.y) < 200:
-                        e.dead = True
+                        e.take_damage(2)
                         break
 
     def draw(self, surface, camera_x):

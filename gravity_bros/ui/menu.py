@@ -43,7 +43,7 @@ def draw_level_select(screen, font, unlocked_levels, selected_level, difficulty,
     instr = font.render("[S] STORE | [ESC] MAIN MENU | [ENTER] PLAY", True, (0, 255, 255))
     screen.blit(instr, (WIDTH // 2 - instr.get_width() // 2, 100))
 
-    grid_start_x = 110
+    grid_start_x = WIDTH // 2 - 290
     grid_start_y = 170
     for i in range(1, 11):
         row = (i - 1) // 5

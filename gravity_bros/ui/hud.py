@@ -3,24 +3,42 @@ from config import WIDTH, HEIGHT, WHITE, GOLD, RED, ORANGE, GREEN
 
 def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosses=None):
     if bosses is None: bosses = []
-    # Weapon Selection UI
-    weapon_data = [
-        {'id': 'fireball', 'label': '1:FIRE', 'color': (255, 69, 0)},
-        {'id': 'gun', 'label': '2:GUN', 'color': (255, 255, 0)},
-        {'id': 'grenade', 'label': '3:GREN', 'color': (0, 100, 0)}
-    ]
-    for i, w in enumerate(weapon_data):
-        is_active = weapon == w['id']
-        wx, wy = 20 + i * 90, HEIGHT - 60
-        rect = pygame.Rect(wx, wy, 80, 30)
-        bg_color = (100, 100, 100, 150) if is_active else (0, 0, 0, 150)
-        s = pygame.Surface((80, 30), pygame.SRCALPHA)
-        s.fill(bg_color)
-        screen.blit(s, (wx, wy))
-        border_color = w['color'] if is_active else (100, 100, 100)
-        pygame.draw.rect(screen, border_color, rect, 2 if is_active else 1)
-        w_text = font.render(w['label'], True, WHITE if is_active else (170, 170, 170))
-        screen.blit(w_text, (wx + 5, wy + 5))
+
+    # Character Attack Info (bottom-left)
+    ATTACK_NAMES = {
+        'Juan': ('Guava Throw', (180, 220, 80)),
+        'Maria': ('Fan Swipe', (255, 160, 190)),
+        'LapuLapu': ('Kris Blade', (255, 200, 0)),
+        'Jose': ('Quill Shot', (100, 150, 255)),
+        'Andres': ('Bolo Slash', (200, 200, 200)),
+        'Aswang': ('Tongue Lash', (220, 60, 80)),
+        'Tikbalang': ('Hoof Kick', (130, 90, 40)),
+        'Kapre': ('Ember Toss', (255, 80, 0)),
+        'Manananggal': ('Claw Swipe', (160, 0, 80)),
+        'Datu': ('Spear Throw', (255, 140, 0)),
+        'Sorbetero': ('Ice Scoop', (200, 230, 255)),
+        'Taho': ('Taho Splash', (160, 90, 20)),
+        'Malunggay': ('Leaf Burst', (0, 200, 50)),
+        'Batak': ('Poison Dart', (0, 180, 40)),
+        'Jeepney': ('HONK!', (255, 220, 0)),
+    }
+    ch = getattr(player, 'selected_character', 'Juan')
+    atk_name, atk_color = ATTACK_NAMES.get(ch, ('Attack', WHITE))
+    wx, wy = 20, HEIGHT - 55
+    # Attack label
+    atk_bg = pygame.Surface((160, 28), pygame.SRCALPHA)
+    atk_bg.fill((0, 0, 0, 160))
+    screen.blit(atk_bg, (wx, wy))
+    pygame.draw.rect(screen, atk_color, (wx, wy, 160, 28), 2)
+    lbl = font.render(f"F: {atk_name}", True, atk_color)
+    screen.blit(lbl, (wx + 6, wy + 4))
+    # Attack cooldown micro-bar
+    cd = getattr(player, 'attack_cooldown', 0)
+    rate = getattr(player, 'attack_rate', 20)
+    if cd > 0:
+        filled = int(156 * (1.0 - cd / max(1, rate)))
+        pygame.draw.rect(screen, (60, 60, 60), (wx + 2, wy + 24, 156, 4))
+        pygame.draw.rect(screen, atk_color,   (wx + 2, wy + 24, filled, 4))
 
     hud_bg = pygame.Surface((WIDTH, 70), pygame.SRCALPHA)
     hud_bg.fill((0, 0, 0, 180))
@@ -40,9 +58,27 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosse
     screen.blit(score_text, (20, 10))
     screen.blit(coins_text, (20, 35))
     
-    if getattr(player, 'combo_kills', 0) > 1:
-        combo_text = big_font.render(f"COMBO x{player.combo_kills}!", True, ORANGE)
-        screen.blit(combo_text, (20, 65))
+    combo = getattr(player, 'combo_kills', 0)
+    if combo > 1:
+        import math as _m
+        # Color escalation
+        if combo >= 10: c_color = (255, 0, 0)
+        elif combo >= 6: c_color = ORANGE
+        elif combo >= 3: c_color = (255, 255, 0)
+        else: c_color = WHITE
+        # Multiplier text
+        if combo >= 10: mult = "×3.0"
+        elif combo >= 6: mult = "×2.0"
+        elif combo >= 3: mult = "×1.5"
+        else: mult = ""
+        # Pulsing scale effect
+        pulse = 1.0 + 0.1 * _m.sin(pygame.time.get_ticks() * 0.01)
+        combo_str = f"COMBO ×{combo}! {mult}"
+        combo_surf = big_font.render(combo_str, True, c_color)
+        pw = int(combo_surf.get_width() * pulse)
+        ph = int(combo_surf.get_height() * pulse)
+        combo_surf = pygame.transform.scale(combo_surf, (max(1, pw), max(1, ph)))
+        screen.blit(combo_surf, (20, 65))
         
     # Right Block
     gravity_text = font.render(f"GRAVITY: {'UP' if getattr(player, 'gravity_dir', 1) == -1 else 'DOWN'}", True, WHITE)
@@ -118,15 +154,14 @@ def draw_pause_menu(screen, font, big_font):
     c1 = font.render("--- CONTROLS ---", True, (0, 255, 255))
     c2 = font.render("Move: A/D or LEFT/RIGHT", True, WHITE)
     c3 = font.render("Jump: W or UP Arrow", True, WHITE)
-    c4 = font.render("Shoot: F  |  Unique Skill: E", True, WHITE)
+    c4 = font.render("Basic Attack: F  |  Unique Skill: E", True, WHITE)
     c5 = font.render("Melee Attack: Q", True, (255, 200, 0))
     c6 = font.render("Gravity Dash: CTRL", True, (0, 200, 255))
     c7 = font.render("Flip Gravity: G", True, (255, 100, 100))
-    c8 = font.render("Swap Weapons: 1, 2, 3", True, WHITE)
-    c9 = font.render("Cheats: C  |  Quit to Menu: Q (while paused)", True, ORANGE)
+    c8 = font.render("Cheats: C  |  Quit to Menu: Q (while paused)", True, ORANGE)
     
-    for i, t in enumerate([c1, c2, c3, c4, c5, c6, c7, c8, c9]):
-        screen.blit(t, (WIDTH//2 - t.get_width()//2, 185 + i * 38))
+    for i, t in enumerate([c1, c2, c3, c4, c5, c6, c7, c8]):
+        screen.blit(t, (WIDTH//2 - t.get_width()//2, 190 + i * 40))
     
     r_text = font.render("Press 'ESC' or 'P' to Resume", True, RED)
     screen.blit(r_text, (WIDTH//2 - r_text.get_width()//2, HEIGHT - 50))

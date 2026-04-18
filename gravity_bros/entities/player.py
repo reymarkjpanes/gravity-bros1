@@ -47,9 +47,15 @@ class Player(pygame.sprite.Sprite):
         
         self.shield_active = False
         
+        self.combo_timer = 0
         self.combo_kills = 0
         self.trail = []
-        
+
+        self.attack_cooldown = 0
+        self.attack_rate = 20   # frames between basic attacks
+        self.tongue_target = None
+        self.tongue_drain_timer = 0
+
         self.selected_character = 'Juan'
         self.selected_skin = 'Default'
 
@@ -77,10 +83,16 @@ class Player(pygame.sprite.Sprite):
             return effects
 
         # Tick timers
-        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer', 'dash_cooldown', 'melee_timer'):
+        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer', 'dash_cooldown', 'melee_timer', 'attack_cooldown', 'combo_timer'):
             v = getattr(self, attr)
             if v > 0: setattr(self, attr, v - 1)
-            
+
+        if self.combo_timer <= 0 or self.on_ground:
+            self.combo_kills = 0
+
+        # Tongue drain update (Aswang life-steal mechanic)
+        self._tick_tongue_drain(particles)
+
         if self.shield_active and self.ability_timer <= 0:
             self.shield_active = False
             
@@ -163,13 +175,13 @@ class Player(pygame.sprite.Sprite):
                 elif not is_truly_invuln:
                     self.die()
                 elif self.is_dashing:
-                    e.dead = True
+                    e.take_damage(2)
                     self.score += 50
                     effects['hit_stop'] = 2
                     particles.append(Particle(e.rect.centerx, e.rect.centery, (0, 255, 255), 10))
             
             if self.melee_timer > 0 and self.melee_hitbox.colliderect(e.rect):
-                e.dead = True
+                e.take_damage(2)
                 self.score += 50
                 effects['hit_stop'] = 3
                 effects['screen_shake'] = 3
@@ -311,97 +323,576 @@ class Player(pygame.sprite.Sprite):
                             pass # Jeepney breaks items without bouncing?
                         self.score += 100; self.coins += 1
                         
+    # ── Tongue drain update (called from update each frame) ───────────────────
+    def _tick_tongue_drain(self, particles):
+        if self.tongue_drain_timer <= 0: return
+        self.tongue_drain_timer -= 1
+        t = self.tongue_target
+        if t and not t.dead:
+            if self.tongue_drain_timer % 10 == 0:  # drain 1 HP every 10 frames
+                t.take_damage(1)
+                self.invincibility_timer = max(self.invincibility_timer, 40)
+                particles.append(Particle(t.rect.centerx, t.rect.centery, (180, 0, 30), size=5))
+                particles.append(Particle(self.rect.centerx, self.rect.centery, (220, 60, 80), size=4))
+        else:
+            self.tongue_drain_timer = 0
+            self.tongue_target = None
+
+    # ── Unique basic attack ────────────────────────────────────────────────────
+    def basic_attack(self, projectiles, particles, enemies):
+        """Character-specific basic attack. Returns True if fired."""
+        import random as _rnd
+        if self.attack_cooldown > 0: return False
+
+        ch = self.selected_character
+
+        # ── Rate & projectile per character ──────────────────────────────────
+        if ch == 'Juan':
+            # Throws a ripe guava — medium range
+            self.attack_rate = 22
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 9, -1, 'guava', damage=1))
+            for _ in range(4):
+                particles.append(Particle(self.rect.centerx, self.rect.centery, (180, 220, 80), size=4))
+
+        elif ch == 'Maria':
+            # Elegant fan swipe — melee range arc, very fast cooldown
+            self.attack_rate = 18
+            self.melee_timer = max(self.melee_timer, 14)
+            for _ in range(6):
+                particles.append(Particle(
+                    self.rect.centerx + self.facing * _rnd.randint(10, 35),
+                    self.rect.centery + _rnd.randint(-15, 15),
+                    (255, 160, 190), size=5))
+
+        elif ch == 'LapuLapu':
+            # Throws a spinning kris blade — medium range, high damage
+            self.attack_rate = 28
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 12, 0, 'kris', damage=2))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (255, 200, 0), size=7))
+
+        elif ch == 'Jose':
+            # Fires an enchanted quill — fast, long range, 1 damage
+            self.attack_rate = 14
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 16, 0, 'quill', damage=1))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (100, 120, 255), size=4))
+
+        elif ch == 'Andres':
+            # Close-range bolo slash — wide melee, high damage
+            self.attack_rate = 26
+            self.melee_hitbox = pygame.Rect(
+                self.rect.centerx + self.facing * 10, self.rect.centery - 20, 50, 40)
+            self.melee_timer = max(self.melee_timer, 16)
+            for _ in range(8):
+                particles.append(Particle(
+                    self.rect.centerx + self.facing * _rnd.randint(5, 40),
+                    self.rect.centery + _rnd.randint(-20, 20),
+                    (200, 200, 200), size=6))
+
+        elif ch == 'Aswang':
+            # Short tongue lash — quick, 1 damage, short range
+            self.attack_rate = 18
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 10, 0, 'tongue', damage=1))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (220, 60, 80), size=5))
+
+        elif ch == 'Tikbalang':
+            # Hoof kick forward — melee + short-range projectile
+            self.attack_rate = 24
+            self.melee_timer = max(self.melee_timer, 12)
+            projectiles.append(Projectile(
+                self.rect.centerx + self.facing * 20, self.rect.centery,
+                self.facing * 8, 0, 'hoof', damage=2))
+            for _ in range(5):
+                particles.append(Particle(
+                    self.rect.centerx + self.facing * _rnd.randint(0, 25),
+                    self.rect.bottom - _rnd.randint(0, 10),
+                    (130, 90, 40), size=6))
+
+        elif ch == 'Kapre':
+            # Lobs a cigar ember in an arc
+            self.attack_rate = 30
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 7, -5, 'ember', damage=1))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (255, 80, 0), size=6))
+
+        elif ch == 'Manananggal':
+            # Claw swipe — fast melee fan attack
+            self.attack_rate = 20
+            self.melee_timer = max(self.melee_timer, 14)
+            for i in range(5):
+                particles.append(Particle(
+                    self.rect.centerx + self.facing * _rnd.randint(8, 30),
+                    self.rect.centery + _rnd.randint(-20, 20),
+                    (160, 0, 80), size=5))
+
+        elif ch == 'Datu':
+            # Throws a heavy tribal spear — fast, high damage
+            self.attack_rate = 20
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 14, 0, 'spear', damage=2))
+            for _ in range(3):
+                particles.append(Particle(self.rect.centerx, self.rect.centery, (255, 140, 0), size=5))
+
+        elif ch == 'Sorbetero':
+            # Lobs an ice cream scoop in an arc — slows enemies on hit
+            self.attack_rate = 22
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 8, -4, 'scoop', damage=1))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 230, 255), size=6))
+
+        elif ch == 'Taho':
+            # Splashes taho forward — short-range spray (3 tiny droplets)
+            self.attack_rate = 20
+            for i in range(3):
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    self.facing * (6 + i * 2), _rnd.uniform(-2, 2), 'taho', damage=1))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (160, 90, 20), size=5))
+
+        elif ch == 'Malunggay':
+            # Fires a burst of malunggay leaves — light, fast, 2-shot
+            self.attack_rate = 16
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 13, -1, 'leaf', damage=1))
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 13, 1, 'leaf', damage=1))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (0, 200, 50), size=4))
+
+        elif ch == 'Batak':
+            # Quick single poison dart — very fast, very fast cooldown
+            self.attack_rate = 10
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery - 4,
+                self.facing * 17, 0, 'dart', damage=1))
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (0, 180, 40), size=3))
+
+        elif ch == 'Jeepney':
+            # Loud HONK shockwave — wide melee + close-range ring
+            self.attack_rate = 25
+            self.melee_hitbox = pygame.Rect(
+                self.rect.centerx - 30, self.rect.centery - 20, 80, 40)
+            self.melee_timer = max(self.melee_timer, 16)
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 5, 0, 'honk', damage=2))
+            for _ in range(8):
+                particles.append(Particle(
+                    self.rect.centerx + self.facing * _rnd.randint(0, 50),
+                    self.rect.centery + _rnd.randint(-15, 15),
+                    (255, 220, 0), size=8))
+        else:
+            return False  # No basic attack defined
+
+        self.attack_cooldown = self.attack_rate
+        return True
+
     def trigger_skill(self, particles, projectiles, enemies, bosses):
         if self.ability_cooldown > 0: return False
-        
+
         ch = self.selected_character
-        
-        # Emit a burst of visual particles to make the skill click satisfying
-        for _ in range(10):
-            particles.append(Particle(self.rect.centerx, self.rect.centery, color=(255, 215, 0)))
-        
-        if ch == 'Juan': # Guava Rest — brief invincibility + stun nearby enemies
-            self.ability_timer = 120
-            self.max_cooldown = 500
-            self.invincibility_timer = 150
-            for e in enemies:
-                if abs(e.rect.centerx - self.rect.centerx) < 150: e.stun_timer = 120
-            sounds.play('jump')
-        elif ch == 'Maria': # Fan Shield — blocks projectiles
+        import random as _rnd
+
+
+        if ch == 'Juan':
+            # ══ BAYANIHAN SPIRIT ══
+            # The iconic Filipino community value of collective effort.
+            # Juan channels the spirit of his baryo: 30 golden-yellow
+            # "neighbor" particles orbit him while granting full
+            # invincibility + healing aura and stunning all nearby
+            # enemies with a shockwave of communal light.
             self.ability_timer = 200
-            self.max_cooldown = 600
-            self.shield_active = True
-        elif ch == 'LapuLapu': # Mactan Strike — forward slash dealing boss damage
-            self.dash_timer = 20
-            self.is_dashing = True
-            self.max_cooldown = 300
-            self.invincibility_timer = 20
-            self.melee_timer = 20  # Wide hitbox active during dash strike
-            for b in bosses:
-                if abs(b.rect.centerx - self.rect.centerx) < 200 and b.invincible_timer <= 0:
-                    b.health -= 3
-                    b.invincible_timer = 30
-                    self._requested_shake = 8
-        elif ch == 'Jose': # Noli Projectile — magic book shot
-            self.max_cooldown = 150
-            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 14, 0, 'book'))
-            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 14, -3, 'book'))
-        elif ch == 'Andres': # Rage Mode — speed + melee damage burst
-            self.ability_timer = 300
-            self.max_cooldown = 800
+            self.max_cooldown = 550
+            self.invincibility_timer = 200
             for e in enemies:
-                if abs(e.rect.centerx - self.rect.centerx) < 100: e.dead = True
+                dist = abs(e.rect.centerx - self.rect.centerx)
+                if dist < 300:
+                    e.stun_timer = int(200 - dist // 2)
+            for _ in range(40):
+                angle = _rnd.uniform(0, 6.28)
+                r = _rnd.randint(20, 80)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                particles.append(Particle(px, py, (255, 215, 0), size=6))
+                particles.append(Particle(px, py, (255, 255, 200), size=3))
+            self._requested_shake = 4
+            sounds.play('jump')
+
+        elif ch == 'Maria':
+            # ══ FILIPINA GRACE — Maria Clara's Fan ══
+            # Maria Clara's legendary fan becomes an iridescent energy
+            # shield that deflects all projectiles forward as a
+            # reflected arc of white-pink petals, and charms the
+            # nearest enemy so they walk away from Juan for 3 seconds.
+            self.ability_timer = 250
+            self.max_cooldown = 550
+            self.shield_active = True
+            # Fan petal burst (rose-pink  + white)
+            for _ in range(35):
+                angle = _rnd.uniform(-1.2, 1.2)   # Fan arc forward
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    self.facing * _rnd.uniform(4, 9),
+                    math.sin(angle) * 5, 'book'))
+                particles.append(Particle(
+                    self.rect.centerx, self.rect.centery,
+                    (_rnd.randint(220,255), _rnd.randint(100,180), _rnd.randint(150,200)), size=5))
+            # Charm nearest enemy
+            if enemies:
+                nearest = min(enemies, key=lambda e: abs(e.rect.x - self.rect.x))
+                nearest.vx = -nearest.vx  # Walk away
+                nearest.stun_timer = 180
+            sounds.play('jump')
+
+        elif ch == 'LapuLapu':
+            # ══ BATTLE OF MACTAN ══
+            # Lapu-Lapu's legendary defeat of Magellan on April 27 1521.
+            # He charges forward in an invincible kris-slash dash, leaving
+            # a trail of orange-gold war sparks. Deals massive direct HP
+            # damage to any boss in range (the "Spanish armada encounter").
+            self.max_cooldown = 320
+            self.is_dashing = True
+            self.dash_timer = 25
+            self.invincibility_timer = 30
+            self.melee_timer = 25
+            # Gold + orange war-paint particles trail
+            for i in range(20):
+                particles.append(Particle(
+                    self.rect.centerx - self.facing * i * 4,
+                    self.rect.centery + _rnd.randint(-8, 8),
+                    (255, _rnd.randint(100, 200), 0), size=7))
+            # Direct boss devastation
+            for b in bosses:
+                if abs(b.rect.centerx - self.rect.centerx) < 250 and b.invincible_timer <= 0:
+                    b.health -= 25
+                    b.invincible_timer = 35
+                    b.stun_timer = 20
+                    self._requested_shake = 12
+            sounds.play('jump')
+
+        elif ch == 'Jose':
+            # ══ NOLI ME TANGERE — Pen Is Mightier ══
+            # Rizal's two greatest novels become enchanted book-blades
+            # shot in an expanding triple spread (Noli Me Tangere,
+            # El Filibusterismo, Mi Ultimo Adios). Blue enlightenment
+            # particles illuminate the path. Each book deals -1 boss HP.
+            self.max_cooldown = 200
+            spreads = [(-4, -1), (0, 0), (4, 1)]
+            for vx_off, vy_off in spreads:
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    self.facing * (13 + vx_off), vy_off, 'book'))
+            # Enlightenment aura (indigo + cyan)
+            for _ in range(25):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-30, 30),
+                    self.rect.centery + _rnd.randint(-30, 30),
+                    (_rnd.randint(80,120), _rnd.randint(100,200), 255), size=5))
+            sounds.play('jump')
+
+        elif ch == 'Andres':
+            # ══ SIGAW NG PUGAD LAWIN — Katipunan War Cry ══
+            # Andres Bonifacio's iconic cry that started the revolution.
+            # Triggers a berserker state with 2× speed and melee range.
+            # All enemies within 130px are instantly eliminated by the
+            # shockwave, and the boss is shoved back with a -3 HP bolo hit.
+            # Crimson + orange revolutionary fire bursts in all directions.
+            self.ability_timer = 350
+            self.max_cooldown = 900
+            # Shockwave kill ring
+            for e in enemies:
+                if abs(e.rect.centerx - self.rect.centerx) < 130: e.take_damage(99)
+            # 360° fire explosion particles
+            for i in range(48):
+                angle = i * (6.28 / 48)
+                r = _rnd.randint(15, 50)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                particles.append(Particle(px, py, (255, _rnd.randint(30, 100), 0), size=8))
+            # Boss bolo strike
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 120 and b.invincible_timer <= 0:
-                    b.health -= 2; b.invincible_timer = 20
-        elif ch == 'Aswang': # Life Steal — kill nearest enemy and restore invincibility
-            self.ability_timer = 300
-            self.max_cooldown = 600
-            nearest = min(enemies, key=lambda e: abs(e.rect.x - self.rect.x), default=None)
-            if nearest and not nearest.dead:
-                nearest.dead = True
-                self.invincibility_timer = 180
-        elif ch == 'Tikbalang': # Instant Mega Jump
-            self.vel_y = -25 * self.gravity_dir
-            self.on_ground = False
-            self.max_cooldown = 150
+                    b.health -= 25; b.invincible_timer = 25
+            self._requested_shake = 14
             sounds.play('jump')
-        elif ch == 'Kapre': # Smoke Screen — stuns all nearby enemies + bosses
-            self.max_cooldown = 600
-            for _ in range(30):
-                particles.append(Particle(self.rect.centerx, self.rect.centery, (100, 100, 100), size=10))
-            for e in enemies:
-                if abs(e.rect.centerx - self.rect.centerx) < 250: e.stun_timer = 200
+
+        elif ch == 'Aswang':
+            # ══ HIGOP NG DUGO — Long-Range Tongue Latch & Drain ══
+            # Aswang fires a long-range tongue that latches onto the nearest
+            # enemy or boss. While latched, it drains HP over 3 seconds,
+            # converting it to player invincibility frames (life-steal).
+            self.ability_timer = 180
+            self.max_cooldown = 650
+            # Fire long-range tongue projectile
+            projectiles.append(Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.facing * 14, 0, 'tongue_long', damage=2))
+            # Find nearest enemy for tongue latch drain
+            nearby = sorted(enemies, key=lambda e: abs(e.rect.x - self.rect.x))
+            target = None
+            for e in nearby:
+                if not e.dead and abs(e.rect.centerx - self.rect.centerx) < 350:
+                    target = e
+                    break
+            if target:
+                self.tongue_target = target
+                self.tongue_drain_timer = 90  # 1.5 seconds of drain
+                target.stun_timer = 90  # Enemy can't move while latched
+            # Blood drain particles
+            for _ in range(25):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-40, 40),
+                    self.rect.centery + _rnd.randint(-30, 30),
+                    (180, 0, _rnd.randint(20, 60)), size=6))
+            self.invincibility_timer = max(self.invincibility_timer, 120)
+            # Deal boss drain damage too
             for b in bosses:
-                if abs(b.rect.centerx - self.rect.centerx) < 250: b.stun_timer = 120
-        elif ch == 'Datu': # Twin Fire — fires two fireballs that hit bosses
-            self.max_cooldown = 120
-            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 10, -5, 'fireball'))
-            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 10, 5, 'fireball'))
-        elif ch == 'Sorbetero': # Brain Freeze — stun all enemies + bosses
-            self.max_cooldown = 800
-            for e in enemies: e.stun_timer = 180
-            for b in bosses: b.stun_timer = 180
+                if abs(b.rect.centerx - self.rect.centerx) < 100 and b.invincible_timer <= 0:
+                    b.health -= 10; b.invincible_timer = 15
+                    b.stun_timer = max(b.stun_timer, 60)
+            sounds.play('jump')
+
+        elif ch == 'Tikbalang':
+            # ══ WILD STAMPEDE ══
+            # The half-horse Tikbalang's legendary uncontrollable sprint
+            # through the forest. Launches a massive gravity-powered leap
+            # + a forward horizontal burst at triple speed.  
+            # Brown + tan stampede-dust particles trail behind.
+            self.max_cooldown = 200
+            self.vel_y = -28 * self.gravity_dir
+            self.on_ground = False
+            self.speed_boost_timer = 180
+            self.is_dashing = True
+            self.dash_timer = 30
+            self.invincibility_timer = 30
+            for i in range(20):
+                particles.append(Particle(
+                    self.rect.centerx - self.facing * i * 5,
+                    self.rect.bottom - _rnd.randint(0, 15),
+                    (_rnd.randint(120,160), _rnd.randint(80,110), 50), size=8))
+            self._requested_shake = 7
+            sounds.play('jump')
+
+        elif ch == 'Kapre':
+            # ══ TABAHOY NG KAPRE — Giant's Tobacco Curse ══
+            # The Kapre is a giant cigar-smoking tree-spirit. He exhales
+            # a massive toxic smoke cloud: 50 dark-grey/brown particles
+            # billow outward in a globe. ALL enemies on screen are stunned
+            # AND briefly blinded (stun_timer = 300). Bosses lose -1 HP
+            # per second while inside the smoke (3 hits).
+            self.max_cooldown = 700
+            for _ in range(50):
+                angle = _rnd.uniform(0, 6.28)
+                r = _rnd.randint(10, 150)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                shade = _rnd.randint(60, 110)
+                particles.append(Particle(px, py, (shade, shade - 10, shade - 30), size=_rnd.randint(6, 14)))
+            for e in enemies:
+                e.stun_timer = 300
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 15; b.invincible_timer = 20
+                    b.stun_timer = max(b.stun_timer, 180)
+            self._requested_shake = 6
+            sounds.play('jump')
+
+        elif ch == 'Manananggal':
+            # ══ HATAW NG MANANANGGAL — Torso Split Form ══
+            # The Manananggal splits at the torso and floats upward,
+            # becoming completely airborne + invincible for 4 seconds.
+            # During split form she rains down blood-red viscera
+            # projectiles (simulated by firing 5 downward fireballs
+            # in a fan). Terrifying dark-red + purple aura while active.
+            self.ability_timer = 240
+            self.max_cooldown = 700
+            self.invincibility_timer = 240
+            self.vel_y = -18 * self.gravity_dir   # Fly upward
+            # Fan of downward viscera shots
+            for angle_deg in [-60, -30, 0, 30, 60]:
+                angle_rad = math.radians(angle_deg)
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    math.sin(angle_rad) * 6,
+                    abs(math.cos(angle_rad)) * 10 * self.gravity_dir,  # Always downward
+                    'fireball'))
+            # Dark-red aura burst
+            for _ in range(30):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-40, 40),
+                    self.rect.centery + _rnd.randint(-40, 40),
+                    (_rnd.randint(150,220), 0, _rnd.randint(60,100)), size=7))
+            sounds.play('jump')
+
+        elif ch == 'Datu':
+            # ══ HUSGADO NG DATU — Chieftain's War Council ══
+            # A pre-colonial Datu commands his warriors. Fires a full
+            # 180° spread of 7 flaming spear-projectiles simultaneously
+            # in an arc (like a Filipino war formation). Gold + red
+            # tribal war-paint particles spiral outward.
+            self.max_cooldown = 180
+            for i in range(7):
+                angle_deg = -90 + i * 30
+                angle_rad = math.radians(angle_deg)
+                speed = 11
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery,
+                    self.facing * speed * math.cos(angle_rad),
+                    speed * math.sin(angle_rad), 'fireball'))
+            # Tribal war particles (gold + deep red)
+            for _ in range(28):
+                particles.append(Particle(
+                    self.rect.centerx, self.rect.centery,
+                    (255, _rnd.choice([50, 180, 215]), 0), size=6))
             self._requested_shake = 5
-        elif ch == 'Taho': # Arnibal Slam — ground pound that hurts nearby bosses
+            sounds.play('jump')
+
+        elif ch == 'Sorbetero':
+            # ══ DIRTY KITCHEN BLIZZARD ══
+            # The sorbetes ice-cream vendor's legendary dirty kitchen
+            # freezer explodes in a city-wide ice blizzard.
+            # ALL enemies and ALL bosses on the entire level are
+            # frozen solid (stun=250). An intense icy-blue blizzard
+            # of 60 particles erupts from Juan's position.
+            self.max_cooldown = 900
+            for e in enemies: e.stun_timer = 250
+            for b in bosses:
+                if b.invincible_timer <= 0:
+                    b.health -= 10; b.invincible_timer = 20
+                    b.stun_timer = max(b.stun_timer, 150)
+            for _ in range(60):
+                angle = _rnd.uniform(0, 6.28)
+                r = _rnd.randint(0, 200)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                particles.append(Particle(px, py,
+                    (_rnd.randint(150,220), _rnd.randint(220,255), 255), size=_rnd.randint(4, 9)))
+            self._requested_shake = 10
+            sounds.play('jump')
+
+        elif ch == 'Taho':
+            # ══ ARNIBAL GROUND SLAM ══
+            # The Taho vendor's iconic cry "TAHO!" before slamming his
+            # aluminum taho canister into the ground. MUST be airborne.
+            # Explodes in sticky golden-brown arnibal (brown sugar syrup)
+            # on landing — all nearby enemies are slowed/stunned, boss
+            # takes -3 HP from the sticky impact shockwave.
             if not self.on_ground:
-                self.vel_y = 20 * self.gravity_dir
-                self.max_cooldown = 400
+                self.vel_y = 22 * self.gravity_dir
+                self.max_cooldown = 450
+                self.melee_timer = 30
+                # Arnibal drip particles (golden-brown) while falling
+                for _ in range(15):
+                    particles.append(Particle(
+                        self.rect.centerx + _rnd.randint(-10, 10),
+                        self.rect.bottom,
+                        (_rnd.randint(160,210), _rnd.randint(90,130), 0), size=6))
+                # On-hit effect handled when melee_timer connects with ground
+                for e in enemies:
+                    if abs(e.rect.centerx - self.rect.centerx) < 160:
+                        e.stun_timer = 200
                 for b in bosses:
-                    if abs(b.rect.centerx - self.rect.centerx) < 150 and b.invincible_timer <= 0:
-                        b.health -= 2; b.invincible_timer = 20
+                    if abs(b.rect.centerx - self.rect.centerx) < 200 and b.invincible_timer <= 0:
+                        b.health -= 15; b.invincible_timer = 25
+                self._requested_shake = 9
+                sounds.play('jump')
             else:
-                return False  # Did not activate
+                return False
+
+        elif ch == 'Malunggay':
+            # ══ SUPERFOOD SURGE ══
+            # Moringa oleifera — the "miracle tree" superfood packed with
+            # vitamins A, C, E and iron. Juan consumes a full dose of
+            # raw malunggay leaves for a massive biological power surge:
+            # speed ×1.8, extended jump, and regeneration aura (heals
+            # invincibility frames). Vivid lime-green health particles
+            # erupt from Juan's body in a full 360° radial burst.
+            self.ability_timer = 350
+            self.max_cooldown = 600
+            self.speed_boost_timer = 350
+            self.invincibility_timer = 120
+            self.double_jump_active = True
+            for _ in range(45):
+                angle = _rnd.uniform(0, 6.28)
+                r = _rnd.randint(5, 60)
+                px = self.rect.centerx + int(r * math.cos(angle))
+                py = self.rect.centery + int(r * math.sin(angle))
+                particles.append(Particle(px, py,
+                    (0, _rnd.randint(180, 255), _rnd.randint(0, 80)), size=7))
+            sounds.play('jump')
+
+        elif ch == 'Batak':
+            # ══ PANA AT TABAK — Blowgun Poison Barrage ══
+            # The Batak are the indigenous forest hunters of Palawan,
+            # masters of the blowgun (sumpit) and bow-and-arrow.
+            # Fires 8 rapid-fire poison dart projectiles in a tight burst
+            # — alternating high/low flight paths like arrow-rain.
+            # Each dart poisons (stuns) enemies it passes through.
+            self.max_cooldown = 150
+            for i in range(8):
+                vy_alt = (-3 if i % 2 == 0 else -1)
+                projectiles.append(Projectile(
+                    self.rect.centerx, self.rect.centery - 5,
+                    self.facing * (12 + i * 0.5), vy_alt, 'gun'))
+            # Green poison burst
+            for _ in range(20):
+                particles.append(Particle(
+                    self.rect.centerx, self.rect.centery,
+                    (0, _rnd.randint(150, 220), _rnd.randint(0, 60)), size=5))
+            sounds.play('jump')
+
+        elif ch == 'Jeepney':
+            # ══ KONTING TIYAGA — FULL THROTTLE ══
+            # The iconic Jeepney's road attitude: always overloaded,
+            # always honking, always somehow making it through.
+            # Triggers an emergency TURBO BOOST: invincible ramming sprint
+            # at extreme speed that plows through ALL enemies on screen
+            # (kills them all instantly). The Jeepney "overloads" — boss
+            # takes -4 HP from the ram and massive screen shake.
+            self.max_cooldown = 700
+            self.is_dashing = True
+            self.dash_timer = 45
+            self.invincibility_timer = 45
+            self.speed_boost_timer = 45
+            # Kill ALL enemies on screen (Jeepney runs them all over)
+            for e in enemies: e.take_damage(99)
+            # Ram boss hard
+            for b in bosses:
+                if abs(b.rect.centerx - self.rect.centerx) < 400 and b.invincible_timer <= 0:
+                    b.health -= 20; b.invincible_timer = 30
+            # Exhaust smoke + chrome gleam particles
+            for i in range(40):
+                particles.append(Particle(
+                    self.rect.centerx - self.facing * _rnd.randint(0, 60),
+                    self.rect.centery + _rnd.randint(-10, 20),
+                    (_rnd.randint(80,140), _rnd.randint(80,140), _rnd.randint(80,140)), size=10))
+                particles.append(Particle(
+                    self.rect.centerx, self.rect.centery,
+                    (255, _rnd.randint(180, 255), 0), size=5))
+            self._requested_shake = 18
+            sounds.play('jump')
+
         else:
-            return False  # Passive character or unmapped
-        
+            return False  # Character not mapped
+
         self.ability_cooldown = self.max_cooldown
-        
+
         if getattr(self, 'is_evolved', False):
-            # Evolved skill buff (lower cooldown)
-            self.ability_cooldown = int(self.ability_cooldown * 0.7)
-            
+            self.ability_cooldown = int(self.ability_cooldown * 0.65)
+
         return True
+
 
     def jump(self, is_immortal=False, is_flappy=False):
         if is_flappy:
@@ -465,6 +956,38 @@ class Player(pygame.sprite.Sprite):
         img = self.images.get(img_key)
         
         if img:
+            # ── Dash Afterimage System ──
+            if not hasattr(self, '_afterimages'):
+                self._afterimages = []
+
+            if self.is_dashing:
+                # Store ghost frame every 3 game frames
+                if self.dash_timer % 3 == 0:
+                    ghost = img.copy()
+                    if self.dead or self.gravity_dir == -1:
+                        ghost = pygame.transform.flip(ghost, False, True)
+                    # Cyan tint overlay
+                    tint = pygame.Surface(ghost.get_size(), pygame.SRCALPHA)
+                    tint.fill((0, 200, 255, 80))
+                    ghost.blit(tint, (0, 0))
+                    self._afterimages.append({
+                        'img': ghost, 'x': self.rect.x, 'y': self.rect.y,
+                        'alpha': 180, 'decay': 12
+                    })
+                # Cap at 6 ghosts
+                if len(self._afterimages) > 6:
+                    self._afterimages = self._afterimages[-6:]
+
+            # Draw afterimages (oldest first = most transparent)
+            for ai in self._afterimages:
+                if ai['alpha'] > 0:
+                    g = ai['img'].copy()
+                    g.set_alpha(ai['alpha'])
+                    surface.blit(g, (ai['x'] - camera_x, ai['y']))
+                    ai['alpha'] -= ai['decay']
+            # Clean up dead ghosts
+            self._afterimages = [a for a in self._afterimages if a['alpha'] > 0]
+
             # Draw Trail
             for tx, ty, tf, tg, alpha in self.trail:
                 t_img = img.copy()
@@ -482,8 +1005,17 @@ class Player(pygame.sprite.Sprite):
                     img.set_alpha(128)
                 else:
                     img.set_alpha(255)
-                    
-            surface.blit(img, (self.rect.x - camera_x, self.rect.y))
+
+            # ── Procedural Walk Cycle Wobble ──
+            if self.on_ground and abs(self.vel_x) > 0.5:
+                import math as _m
+                wobble_angle = _m.sin(pygame.time.get_ticks() * 0.015) * 8 # ±8 degrees
+                img = pygame.transform.rotate(img, wobble_angle)
+                # Re-center after rotation offset
+                b_rect = img.get_rect(center=(self.rect.x - camera_x + self.rect.width//2, self.rect.y + self.rect.height//2))
+                surface.blit(img, b_rect.topleft)
+            else:
+                surface.blit(img, (self.rect.x - camera_x, self.rect.y))
         else:
             # Fallback block
             draw_rect = self.rect.copy()
@@ -494,3 +1026,4 @@ class Player(pygame.sprite.Sprite):
         font = pygame.font.SysFont("monospace", 14, bold=True)
         tag = font.render(self.selected_character.upper(), True, (255, 255, 0))
         surface.blit(tag, (self.rect.centerx - camera_x - tag.get_width()//2, self.rect.top - 20))
+

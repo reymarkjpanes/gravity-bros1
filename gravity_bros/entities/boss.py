@@ -16,10 +16,10 @@ class Boss:
         
         health_mult = 0.5 if difficulty == 'easy' else (1.5 if difficulty == 'hard' else 1.0)
         health_map = {
-            'igorot': 6, 'carabao': 7, 'bakunawa': 8, 'sirena': 6, 'mayon': 10,
-            'tikbalang': 7, 'dambuhala': 9, 'diwata': 6, 'kutsero': 8, 'haring_ibon': 12
+            'igorot': 40, 'carabao': 50, 'bakunawa': 60, 'sirena': 40, 'mayon': 80,
+            'tikbalang': 50, 'dambuhala': 70, 'diwata': 40, 'kutsero': 60, 'haring_ibon': 100
         }
-        self.max_health = int(health_map.get(type_name, 8) * health_mult)
+        self.max_health = int(health_map.get(type_name, 50) * health_mult)
         if self.max_health < 1: self.max_health = 1
         self.health = self.max_health
         
