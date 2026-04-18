@@ -141,6 +141,42 @@ class Portal:
         pygame.draw.ellipse(surface, c1, r)
         pygame.draw.ellipse(surface, c2, pygame.Rect(r.x + 10, r.y + 20, 20, 40))
 
+class Checkpoint:
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y-30, 60, 60) # Bahay Kubo structure
+        self.active = False
+        
+    def draw(self, surface, time, camera_x):
+        r = self.rect.copy()
+        r.x -= camera_x
+        # Draw Bahay Kubo checkpoint
+        color = (0, 255, 0) if self.active else (139, 69, 19)
+        roof_color = (0, 200, 0) if self.active else (210, 180, 140)
+        
+        pygame.draw.rect(surface, color, (r.x + 10, r.y + 20, 40, 40))
+        pygame.draw.polygon(surface, roof_color, [(r.x, r.y + 20), (r.x + 30, r.y), (r.x + 60, r.y + 20)])
+        if self.active:
+            global _BLOCK_FONT
+            if _BLOCK_FONT is None:
+                pygame.font.init()
+                _BLOCK_FONT = pygame.font.SysFont("monospace", 24, bold=True)
+            txt = _BLOCK_FONT.render("SAVED", True, (0, 255, 0))
+            if (time // 500) % 2 == 0:
+                surface.blit(txt, (r.x + 30 - txt.get_width()//2, r.top - 25))
+
+class HiddenPortal:
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y, 40, 80)
+        
+    def draw(self, surface, time, camera_x):
+        r = self.rect.copy()
+        r.x -= camera_x
+        # Draw as a Balete tree trunk (dark brown) with glowing runes
+        pygame.draw.rect(surface, (50, 30, 20), r)
+        pygame.draw.rect(surface, (30, 15, 10), (r.x+5, r.y, 10, 80))
+        if (time // 300) % 2 == 0:
+            pygame.draw.circle(surface, (0, 255, 255), (r.centerx, r.centery), 5)
+
 class Projectile:
     def __init__(self, x, y, vx, vy, p_type):
         self.rect = pygame.Rect(x, y, 10, 10)
@@ -228,3 +264,109 @@ class Scenery:
         elif self.type == 'rice_stalk':
             sway = math.sin(time / 800) * 3
             pygame.draw.line(surface, (50, 205, 50), (x, y), (x + sway, y - 15), 2)
+
+class FloatText:
+    def __init__(self, x, y, text, color=(255, 255, 0)):
+        self.x = x
+        self.y = y
+        self.text = text
+        self.color = color
+        self.life = 1.0 # matches Particle convention
+        self.vy = -1.5
+
+    def update(self):
+        self.y += self.vy
+        self.life -= 0.02 # fade out over ~50 frames
+
+    def draw(self, surface, camera_x):
+        if self.life > 0:
+            global _BLOCK_FONT
+            if _BLOCK_FONT is None:
+                pygame.font.init()
+                _BLOCK_FONT = pygame.font.SysFont("monospace", 24, bold=True)
+            txt = _BLOCK_FONT.render(self.text, True, self.color)
+            txt.set_alpha(int(self.life * 255))
+            surface.blit(txt, (self.x - camera_x - txt.get_width()//2, self.y))
+
+class Spike:
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y, 32, 16)
+
+    def draw(self, surface, camera_x, theme):
+        cx = self.rect.centerx - camera_x
+        points = [(self.rect.left - camera_x, self.rect.bottom), 
+                  (cx, self.rect.top), 
+                  (self.rect.right - camera_x, self.rect.bottom)]
+        pygame.draw.polygon(surface, (180, 180, 180), points)
+        pygame.draw.polygon(surface, BLACK, points, 2)
+
+class FallingPlatform:
+    def __init__(self, x, y, w, h):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.falling = False
+        self.fall_timer = 30
+        self.vy = 0
+
+    def update(self):
+        if self.falling:
+            self.fall_timer -= 1
+            if self.fall_timer <= 0:
+                self.vy += 0.5
+                self.rect.y += int(self.vy)
+
+    def draw(self, surface, camera_x, theme):
+        r = self.rect.copy()
+        r.x -= camera_x
+        if self.falling and self.fall_timer <= 0:
+            c = (150, 50, 50)
+        elif self.falling:
+            c = (200, 100, 100)
+            r.x += math.sin(self.fall_timer) * 3
+        else:
+            c = (255, 150, 150)
+        pygame.draw.rect(surface, c, r)
+        pygame.draw.rect(surface, BLACK, r, 2)
+
+class Pet:
+    def __init__(self, type_name):
+        self.x = 0
+        self.y = 0
+        self.type = type_name
+        self.facing = 1
+
+    def update(self, player, enemies, coins):
+        import math as _m
+        ox = player.rect.centerx - player.facing * 40
+        oy = player.rect.top - 20
+        self.facing = player.facing
+        
+        self.x += (ox - self.x) * 0.1
+        self.y += (oy - self.y) * 0.1
+
+        if self.type == 'Tarsier':
+            for c in coins:
+                if _m.hypot(c.rect.centerx - self.x, c.rect.centery - self.y) < 150:
+                    c.rect.x += int((self.x - c.rect.x) * 0.1)
+                    c.rect.y += int((self.y - c.rect.y) * 0.1)
+
+        elif self.type == 'Agila':
+            if pygame.time.get_ticks() % 120 == 0:
+                for e in enemies:
+                    if not e.dead and _m.hypot(e.rect.centerx - self.x, e.rect.centery - self.y) < 200:
+                        e.dead = True
+                        break
+
+    def draw(self, surface, camera_x):
+        r = pygame.Rect(int(self.x) - camera_x - 10, int(self.y) - 10, 20, 20)
+        if self.type == 'Tarsier':
+            pygame.draw.rect(surface, (139, 69, 19), r)
+            if self.facing == 1:
+                pygame.draw.circle(surface, (255, 255, 200), (r.right, r.top + 5), 6)
+            else:
+                pygame.draw.circle(surface, (255, 255, 200), (r.left, r.top + 5), 6)
+        elif self.type == 'Agila':
+            pygame.draw.polygon(surface, (100, 50, 20), [(r.left, r.bottom), (r.centerx, r.top), (r.right, r.bottom)])
+            if self.facing == 1:
+                pygame.draw.rect(surface, (255, 255, 255), (r.right, r.top + 5, 8, 8))
+            else:
+                pygame.draw.rect(surface, (255, 255, 255), (r.left - 8, r.top + 5, 8, 8))

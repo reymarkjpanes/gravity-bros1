@@ -49,4 +49,14 @@ STORE_ITEMS = {
         {'id': 'star',     'name': 'Invincibility Star', 'cost': 500},
         {'id': 'mushroom', 'name': 'Speed Mushroom',     'cost': 500},
     ],
+    'pets': [
+        {'id': 'None',     'name': 'No Pet', 'cost': 0},
+        {'id': 'Tarsier',  'name': 'Tarsier (Auto-Magnet)', 'cost': 5000},
+        {'id': 'Agila',    'name': 'Agila (Auto-Attack)', 'cost': 8000},
+    ],
+    'upgrades': [
+        {'id': 'speed',    'name': '+Speed Multiplier', 'cost': 2000},
+        {'id': 'jump',     'name': '+Jump Power',       'cost': 2000},
+        {'id': 'magnet',   'name': '+Loot Magnet',      'cost': 3000},
+    ],
 }

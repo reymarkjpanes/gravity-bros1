@@ -1,7 +1,7 @@
 import pygame
 import math
 import os
-from .items import Block, Particle, Projectile
+from .items import Block, Particle, Projectile, FloatText
 from core.sound_manager import sounds
 
 class Player(pygame.sprite.Sprite):
@@ -31,11 +31,24 @@ class Player(pygame.sprite.Sprite):
         self.has_double_jumped = False
         
         self.ability_cooldown = 0
-        self.max_cooldown = 100
+        self.max_cooldown = 300
         self.ability_timer = 0
         self.flight_stamina = 100
+        
+        self.dash_cooldown = 0
+        self.is_dashing = False
         self.dash_timer = 0
+        
+        self.melee_timer = 0
+        self.melee_hitbox = pygame.Rect(0, 0, 40, 40)
+        
+        self.is_mounted = False
+        self.mount_hp = 0
+        
         self.shield_active = False
+        
+        self.combo_kills = 0
+        self.trail = []
         
         self.selected_character = 'Juan'
         self.selected_skin = 'Default'
@@ -64,12 +77,15 @@ class Player(pygame.sprite.Sprite):
             return effects
 
         # Tick timers
-        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer'):
+        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer', 'dash_cooldown', 'melee_timer'):
             v = getattr(self, attr)
             if v > 0: setattr(self, attr, v - 1)
             
         if self.shield_active and self.ability_timer <= 0:
             self.shield_active = False
+            
+        if self.is_dashing and self.dash_timer <= 0:
+            self.is_dashing = False
 
         ch = self.selected_character
         self.jump_power = 19 if ch == 'Tikbalang' else 14
@@ -87,15 +103,16 @@ class Player(pygame.sprite.Sprite):
         keys = pygame.key.get_pressed()
         self.vel_x = 0.0
 
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            self.vel_x = -current_speed
-            self.facing = -1
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            self.vel_x = current_speed
-            self.facing = 1
-
-        if ch in ('LapuLapu', 'Jeepney') and self.dash_timer > 0:
-            self.vel_x = self.facing * (20 if ch == 'LapuLapu' else 28)
+        if not self.is_dashing:
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                self.vel_x = (-current_speed * 1.5) if self.is_mounted else -current_speed
+                self.facing = -1
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                self.vel_x = (current_speed * 1.5) if self.is_mounted else current_speed
+                self.facing = 1
+        else:
+            self.vel_x = self.facing * (current_speed * 3.5)
+            self.vel_y = 0 # Hover while dashing
 
         # Manananggal flight
         if ch == 'Manananggal':
@@ -120,48 +137,75 @@ class Player(pygame.sprite.Sprite):
 
         if self.on_ground:
             self.has_double_jumped = False
+            self.combo_kills = 0
             if ch == 'Taho' and abs(vel_y_before) >= 15:
                 effects['screen_shake'] = 10
                 sounds.play('stomp')
                 for _ in range(20): particles.append(Particle(self.rect.centerx, self.rect.centery, (139, 69, 19), size=8))
 
+        # Melee hitbox update
+        self.melee_hitbox.center = (self.rect.centerx + (self.facing * 20), self.rect.centery)
+
         # Collision with enemies
+        is_truly_invuln = is_immortal or self.invincibility_timer > 0 or self.is_dashing or self.is_mounted
         for e in enemies:
             if not e.dead and self.rect.colliderect(e.rect):
-                stomp = ((self.vel_y > 0 and self.gravity_dir == 1) or
-                         (self.vel_y < 0 and self.gravity_dir == -1))
-                if stomp or self.invincibility_timer > 0 or self.dash_timer > 0 or self.shield_active:
-                    particles.append(Particle(e.rect.centerx, e.rect.centery, (229, 37, 33)))
+                if self.is_mounted:
                     e.dead = True
-                    sounds.play('stomp')
-                    if self.shield_active:
-                        continue # Shield destroys it without bouncing
-                    self.vel_y = -self.jump_power * 0.8 * self.gravity_dir
-                    self.score += 200
-                    self.level_score += 200
-                    if ch == 'Aswang' and self.ability_timer > 0:
-                        self.invincibility_timer = max(self.invincibility_timer, 60)
-                elif not is_immortal:
+                    self.score += 20
+                    self.mount_hp -= 1
+                    particles.append(Particle(e.rect.centerx, e.rect.centery, (150, 150, 150), 10, "spark"))
+                    if self.mount_hp <= 0:
+                        self.is_mounted = False
+                        effects['screen_shake'] = 10
+                        sounds.play('die')
+                        for _ in range(20): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=6))
+                elif not is_truly_invuln:
                     self.die()
+                elif self.is_dashing:
+                    e.dead = True
+                    self.score += 50
+                    effects['hit_stop'] = 2
+                    particles.append(Particle(e.rect.centerx, e.rect.centery, (0, 255, 255), 10))
+            
+            if self.melee_timer > 0 and self.melee_hitbox.colliderect(e.rect):
+                e.dead = True
+                self.score += 50
+                effects['hit_stop'] = 3
+                effects['screen_shake'] = 3
+                particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 10))
 
         # Bosses
         for b in bosses:
-            if not b.dead and self.rect.colliderect(b.rect):
-                if self.shield_active:
-                    pass # Shield blocks boss contact damage!
+            if self.rect.colliderect(b.rect) and not is_truly_invuln and b.health > 0:
+                if self.is_mounted:
+                    self.is_mounted = False
+                    self.vel_x = -15 * self.facing
+                    self.vel_y = -10
+                    b.health -= 50
+                    effects['screen_shake'] = 20
+                    for _ in range(30): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=10))
                 else:
-                    stomp = ((self.vel_y > 0 and self.gravity_dir == 1) or
-                             (self.vel_y < 0 and self.gravity_dir == -1))
-                    if stomp and self.rect.y < b.rect.centery and b.invincible_timer <= 0:
-                        b.take_damage(self)
-                    elif b.invincible_timer <= 0 and self.invincibility_timer <= 0 and not is_immortal:
-                        self.die()
+                    self.die()
+            elif self.rect.colliderect(b.rect) and self.is_dashing and b.invincible_timer <= 0:
+                b.health -= 25
+                b.invincible_timer = 20
+                effects['hit_stop'] = 5
+                effects['screen_shake'] = 6
+                particles.append(Particle(b.rect.centerx, b.rect.centery, (0, 255, 255), 15))
+            elif self.melee_timer > 0 and self.melee_hitbox.colliderect(b.rect) and b.invincible_timer <= 0:
+                b.health -= 50
+                b.invincible_timer = 20
+                effects['hit_stop'] = 4
+                effects['screen_shake'] = 5
+                particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 0, 0), 20))
 
         # Items
         for c in coins[:]:
             if self.rect.colliderect(c.rect):
                 sounds.play('coin')
                 particles.append(Particle(c.rect.centerx, c.rect.centery, (248, 216, 32)))
+                particles.append(FloatText(self.rect.centerx, self.rect.top, "+1", (248, 216, 32)))
                 coins.remove(c)
                 self.score += 100; self.coins += 1
                 self.level_score += 100; self.level_coins += 1
@@ -170,6 +214,7 @@ class Player(pygame.sprite.Sprite):
             if self.rect.colliderect(g.rect):
                 sounds.play('coin')
                 particles.append(Particle(g.rect.centerx, g.rect.centery, (0, 255, 255)))
+                particles.append(FloatText(self.rect.centerx, self.rect.top, "+5 Gems", (0, 255, 255)))
                 gems.remove(g)
                 self.score += 500; self.gems += 1
                 if ch == 'Aswang':
@@ -179,15 +224,20 @@ class Player(pygame.sprite.Sprite):
             if self.rect.colliderect(s.rect):
                 sounds.play('coin')
                 particles.append(Particle(s.rect.centerx, s.rect.centery, (248, 216, 32)))
+                particles.append(FloatText(self.rect.centerx, self.rect.top, "+1 Star", (248, 216, 32)))
                 collectible_stars.remove(s)
                 self.score += 1000; self.stars += 1
 
         for p in power_ups[:]:
             if self.rect.colliderect(p.rect):
                 sounds.play('coin')
+                particles.append(FloatText(self.rect.centerx, self.rect.top, p.type.upper(), (255, 105, 180)))
                 if p.type == 'invincibility': self.invincibility_timer = 600
                 elif p.type == 'doubleJump': self.double_jump_active = True
                 elif p.type == 'speedBoost': self.speed_boost_timer = 600
+                elif p.type == 'flower': # We map the unused flower to the TRICYCLE MOUNT!
+                    self.is_mounted = True
+                    self.mount_hp = 10
                 power_ups.remove(p)
 
         # Fall out of world
@@ -211,6 +261,19 @@ class Player(pygame.sprite.Sprite):
             if pygame.time.get_ticks() % 300 == 0:
                 self.level_score += 10
                 
+        if abs(self.vel_x) > 6 or self.dash_timer > 0 or self.speed_boost_timer > 0:
+            self.trail.append((self.rect.x, self.rect.y, self.facing, self.gravity_dir, 150))
+            
+        if getattr(self, 'is_evolved', False) and pygame.time.get_ticks() % 5 == 0:
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (255, 215, 0), size=5))
+            
+        new_trail = []
+        for tx, ty, tf, tg, alpha in self.trail:
+            alpha -= 15
+            if alpha > 0:
+                new_trail.append((tx, ty, tf, tg, alpha))
+        self.trail = new_trail
+        
         return effects
 
     def _collide(self, vel_x, vel_y, platforms, blocks):
@@ -249,7 +312,7 @@ class Player(pygame.sprite.Sprite):
                         self.score += 100; self.coins += 1
                         
     def trigger_skill(self, particles, projectiles, enemies, bosses):
-        if self.ability_cooldown > 0: return
+        if self.ability_cooldown > 0: return False
         
         ch = self.selected_character
         
@@ -304,19 +367,34 @@ class Player(pygame.sprite.Sprite):
             else:
                 return # Did not activate, don't trigger cooldown
         else:
-            return # Passive character or unmapped, no active skill
+            return False # Passive character or unmapped, no active skill
         
         self.ability_cooldown = self.max_cooldown
+        
+        if getattr(self, 'is_evolved', False):
+            # Evolved skill buff (lower cooldown)
+            self.ability_cooldown = int(self.ability_cooldown * 0.7)
+            
+        return True
 
-    def jump(self, is_immortal=False):
-        # Allow jump only if truly resting on ground (vel_y is stable) or if immortal cheat is active
-        if is_immortal or (self.on_ground and abs(self.vel_y) <= 1.0):
+    def jump(self, is_immortal=False, is_flappy=False):
+        if is_flappy:
             self.vel_y = -self.jump_power * self.gravity_dir
-            self.on_ground = False
             sounds.play('jump')
-        elif self.double_jump_active and not self.has_double_jumped:
+        elif self.vel_y == 0 or is_immortal:
             self.vel_y = -self.jump_power * self.gravity_dir
-            self.has_double_jumped = True
+            sounds.play('jump')
+            
+    def dash(self):
+        if self.dash_cooldown <= 0 and not self.is_dashing:
+            self.is_dashing = True
+            self.dash_timer = 15
+            self.dash_cooldown = 120
+            sounds.play('jump')
+
+    def melee_attack(self):
+        if self.melee_timer <= 0:
+            self.melee_timer = 15 
             sounds.play('jump')
 
     def flip_gravity(self):
@@ -333,7 +411,26 @@ class Player(pygame.sprite.Sprite):
             sounds.play('die')
 
     def draw(self, surface, camera_x):
-        char_key = self.selected_character.lower()
+        if self.melee_timer > 0:
+            slash_color = (255, 215, 0) if getattr(self, 'is_evolved', False) else (200, 255, 255)
+            w = self.melee_timer * 3
+            pygame.draw.arc(surface, slash_color, 
+                (self.melee_hitbox.x - camera_x - w//2, self.melee_hitbox.y - w//2, self.melee_hitbox.width + w, self.melee_hitbox.height + w),
+                -1.5 if self.facing == 1 else 1.5, 
+                1.5 if self.facing == 1 else 4.5, 4)
+                
+                
+        if self.is_mounted:
+            # Draw Tricycle Mount
+            t_color = (200, 50, 50)
+            pygame.draw.rect(surface, t_color, (self.rect.x - camera_x - 10, self.rect.y + 10, 45, 25), border_radius=5)
+            # Wheels
+            pygame.draw.circle(surface, (30,30,30), (self.rect.x - camera_x, self.rect.bottom), 8)
+            pygame.draw.circle(surface, (30,30,30), (self.rect.right - camera_x + 5, self.rect.bottom), 8)
+            # Draw player miniature head
+            pygame.draw.circle(surface, (255, 200, 150), (self.rect.centerx - camera_x, self.rect.top + 5), 8)
+        else:
+            char_key = self.selected_character.lower()
             
         state_key = 'jump' if not self.on_ground else 'idle'
         dir_key = 'right' if self.facing == 1 else 'left'
@@ -342,6 +439,14 @@ class Player(pygame.sprite.Sprite):
         img = self.images.get(img_key)
         
         if img:
+            # Draw Trail
+            for tx, ty, tf, tg, alpha in self.trail:
+                t_img = img.copy()
+                if tf != self.facing: t_img = pygame.transform.flip(t_img, True, False)
+                if tg == -1 or self.dead: t_img = pygame.transform.flip(t_img, False, True)
+                t_img.set_alpha(alpha)
+                surface.blit(t_img, (tx - camera_x, ty))
+
             if self.dead or self.gravity_dir == -1:
                 img = pygame.transform.flip(img, False, True)
             
@@ -361,6 +466,5 @@ class Player(pygame.sprite.Sprite):
             
         # Draw Character Label Tag above head
         font = pygame.font.SysFont("monospace", 14, bold=True)
-        color = getattr(self, '_tag_color', (255, 255, 0))
-        tag = font.render(self.selected_character.upper(), True, color)
+        tag = font.render(self.selected_character.upper(), True, (255, 255, 0))
         surface.blit(tag, (self.rect.centerx - camera_x - tag.get_width()//2, self.rect.top - 20))

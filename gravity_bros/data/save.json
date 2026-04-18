@@ -4,7 +4,7 @@
   ],
   "current_level": 1,
   "score": 0,
-  "coins": 979500,
+  "coins": 893500,
   "gems": 0,
   "stars": 0,
   "global_xp": 0,
@@ -15,15 +15,20 @@
   "selected_skin": "Default",
   "unlocked_characters": [
     "Juan",
-    "Malunggay",
-    "Jose",
-    "Sorbetero",
-    "LapuLapu",
-    "Datu"
+    "LapuLapu"
   ],
-  "selected_character": "Datu",
+  "selected_character": "LapuLapu",
   "unlocked_powerups": [
     "None"
   ],
-  "selected_powerup": "None"
+  "selected_powerup": "None",
+  "unlocked_pets": [
+    "None",
+    "Tarsier"
+  ],
+  "selected_pet": "Tarsier",
+  "unlocked_upgrades": [],
+  "unlocked_evolutions": [
+    "LapuLapu"
+  ]
 }

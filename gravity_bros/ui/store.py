@@ -1,7 +1,7 @@
 import pygame
 from config import WIDTH, HEIGHT, STORE_ITEMS, GOLD, WHITE, GREEN
 
-def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, unlocked_powerups, selected_character, selected_skin, selected_powerup, store_tab, store_selection):
+def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, unlocked_powerups, unlocked_pets, unlocked_upgrades, unlocked_evolutions, selected_character, selected_skin, selected_powerup, selected_pet, store_tab, store_selection):
     screen.fill((20, 20, 25))
     
     pygame.draw.rect(screen, (30, 30, 50), (0, 0, WIDTH, 70))
@@ -23,20 +23,22 @@ def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, u
     esc_hint = font.render("[ESC] Back", True, (150, 150, 150))
     screen.blit(esc_hint, (WIDTH//2 - 50, 25))
 
-    tabs = [("CHARACTERS", 0), ("SKINS", 1), ("POWERUPS", 2)]
+    tabs = [("CHARACTERS", 0), ("SKINS", 1), ("POWER", 2), ("PETS", 3), ("UPGRADE", 4), ("AWAKEN", 5)]
     for text, index in tabs:
         is_active = (store_tab == index)
         tab_bg = (50, 100, 200) if is_active else (40, 40, 50)
         border = WHITE if is_active else (100, 100, 100)
-        rx = 40 + index * 240
+        rx = 20 + index * 125
         try:
-            pygame.draw.rect(screen, tab_bg, (rx, 90, 220, 40), 0, 10)
-            pygame.draw.rect(screen, border, (rx, 90, 220, 40), 2, 10)
+            pygame.draw.rect(screen, tab_bg, (rx, 90, 115, 40), 0, 10)
+            pygame.draw.rect(screen, border, (rx, 90, 115, 40), 2, 10)
         except TypeError:
-            pygame.draw.rect(screen, tab_bg, (rx, 90, 220, 40), 0)
-            pygame.draw.rect(screen, border, (rx, 90, 220, 40), 2)
-        t_surf = font.render(f"{index+1}: {text}", True, WHITE if is_active else (150, 150, 150))
-        screen.blit(t_surf, (rx + 110 - t_surf.get_width()//2, 100))
+            pygame.draw.rect(screen, tab_bg, (rx, 90, 115, 40), 0)
+            pygame.draw.rect(screen, border, (rx, 90, 115, 40), 2)
+            
+        sfont = pygame.font.SysFont("monospace", 14, bold=True)
+        t_surf = sfont.render(text, True, WHITE if is_active else (150, 150, 150))
+        screen.blit(t_surf, (rx + 57 - t_surf.get_width()//2, 102))
 
     if store_tab == 0:
         items = STORE_ITEMS['characters']
@@ -46,10 +48,23 @@ def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, u
         items = STORE_ITEMS['skins']
         unlocked_list = unlocked_skins
         selected_item = selected_skin
-    else:
+    elif store_tab == 2:
         items = STORE_ITEMS['powerups']
         unlocked_list = unlocked_powerups
         selected_item = selected_powerup
+    elif store_tab == 3:
+        items = STORE_ITEMS['pets']
+        unlocked_list = unlocked_pets
+        selected_item = selected_pet
+    elif store_tab == 4:
+        items = STORE_ITEMS['upgrades']
+        unlocked_list = unlocked_upgrades
+        selected_item = None
+    else:
+        # Awaken uses the user's ALREADY UNLOCKED characters, applying an evolution to them
+        items = [{'id': c, 'name': f"AWAKEN: {c}", 'cost': 100000} for c in unlocked_characters]
+        unlocked_list = unlocked_evolutions
+        selected_item = None
 
     scroll_y = max(0, store_selection - 2) * 75
 
@@ -81,8 +96,10 @@ def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, u
         name_text = font.render(item['name'], True, WHITE)
         screen.blit(name_text, (70, y + 20))
         
-        if is_selected:
+        if is_selected and store_tab < 4:
             status_text = font.render("[EQUIPPED]", True, GREEN)
+        elif is_unlocked and store_tab >= 4:
+            status_text = font.render(f"[{'AWAKENED' if store_tab == 5 else 'UNLOCKED'}]", True, GREEN)
         elif is_unlocked:
             status_text = font.render("Press ENTER to Equip", True, (200, 200, 200))
         else:

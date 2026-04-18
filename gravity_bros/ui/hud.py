@@ -1,7 +1,8 @@
 import pygame
 from config import WIDTH, HEIGHT, WHITE, GOLD, RED, ORANGE, GREEN
 
-def draw_hud(screen, font, big_font, player, theme, current_level, weapon):
+def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosses=None):
+    if bosses is None: bosses = []
     # Weapon Selection UI
     weapon_data = [
         {'id': 'fireball', 'label': '1:FIRE', 'color': (255, 69, 0)},
@@ -25,20 +26,24 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon):
     hud_bg.fill((0, 0, 0, 180))
     screen.blit(hud_bg, (0, 0))
     
-    score_text = font.render(f"SCORE: {player.level_score}", True, GOLD)
-    coins_text = font.render(f"PISO:  {player.coins}", True, GOLD)
-    
     level_text = big_font.render(f"LEVEL {current_level}", True, WHITE)
     theme_text = font.render(f"{theme['name']}", True, (200, 200, 255))
-    
-    # Left Block
-    screen.blit(score_text, (20, 10))
-    screen.blit(coins_text, (20, 35))
     
     # Center Block
     screen.blit(level_text, (WIDTH // 2 - level_text.get_width() // 2, 5))
     screen.blit(theme_text, (WIDTH // 2 - theme_text.get_width() // 2, 40))
+
+    score_text = font.render(f"SCORE: {player.level_score}", True, GOLD)
+    coins_text = font.render(f"PISO:  {player.coins}", True, GOLD)
+
+    # Left Block
+    screen.blit(score_text, (20, 10))
+    screen.blit(coins_text, (20, 35))
     
+    if getattr(player, 'combo_kills', 0) > 1:
+        combo_text = big_font.render(f"COMBO x{player.combo_kills}!", True, ORANGE)
+        screen.blit(combo_text, (20, 65))
+        
     # Right Block
     gravity_text = font.render(f"GRAVITY: {'UP' if getattr(player, 'gravity_dir', 1) == -1 else 'DOWN'}", True, WHITE)
     screen.blit(gravity_text, (WIDTH - gravity_text.get_width() - 20, 10))
@@ -55,6 +60,21 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon):
     pygame.draw.rect(screen, WHITE, ab_rect, 1)
     ab_txt = font.render(f"SKILL", True, WHITE)
     screen.blit(ab_txt, (WIDTH - 150 - ab_txt.get_width() - 10, 35))
+
+    # Boss Health Bar (Dark Souls Style)
+    alive_bosses = [b for b in bosses if not b.dead]
+    if alive_bosses:
+        boss = alive_bosses[0] # Just track the first alive boss
+        bw = 600
+        bx = WIDTH // 2 - bw // 2
+        by = HEIGHT - 40
+        pygame.draw.rect(screen, (40, 0, 0), (bx, by, bw, 20))
+        h_pct = max(0, boss.health / getattr(boss, 'max_health', 1))
+        pygame.draw.rect(screen, (200, 0, 0), (bx, by, int(bw * h_pct), 20))
+        pygame.draw.rect(screen, GOLD, (bx, by, bw, 20), 2)
+        
+        boss_name = font.render(boss.type.replace('_', ' ').upper(), True, WHITE)
+        screen.blit(boss_name, (WIDTH // 2 - boss_name.get_width() // 2, HEIGHT - 70))
 
 def draw_minimap(screen, platforms, player, bosses, portal, current_level):
     map_w = 200
@@ -91,7 +111,7 @@ def draw_pause_menu(screen, font, big_font):
     c1 = font.render("--- CONTROLS ---", True, (0, 255, 255))
     c2 = font.render("Move: W,A,S,D or Arrow Keys", True, WHITE)
     c3 = font.render("Jump: W or UP Arrow", True, WHITE)
-    c4 = font.render("Shoot/Ability: F", True, WHITE)
+    c4 = font.render("Shoot: F  |  Ability: E", True, WHITE)
     c5 = font.render("Gravity Flip: G", True, (255, 100, 100))
     c6 = font.render("Swap Weapons: 1, 2, 3", True, WHITE)
     c7 = font.render("Cheats Menu: C", True, WHITE)

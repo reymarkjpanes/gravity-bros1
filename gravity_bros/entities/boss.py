@@ -47,6 +47,8 @@ class Boss:
             enemies.append(Enemy(self.rect.centerx, self.rect.top, minion_type))
 
         if self.health <= self.max_health * 0.5:
+            if self.phase == 1:
+                sounds.play('jump')
             self.phase = 2
             
         self.vel_y += 0.6 if self.type != 'haring_ibon' else 0.1
@@ -80,7 +82,8 @@ class Boss:
 
             self.attack_timer -= 1
             if self.attack_timer <= 0:
-                self.attack_timer = random.randint(80, 150) if self.phase == 1 else random.randint(40, 100)
+                # ENRAGE phase attacks are insanely fast!
+                self.attack_timer = random.randint(80, 150) if self.phase == 1 else random.randint(20, 50)
                 r = random.random()
                 
                 if self.type == 'igorot':
@@ -158,25 +161,29 @@ class Boss:
         draw_rect.x += shake_x
         draw_rect.y += shake_y
 
+        is_enraged = getattr(self, 'phase', 1) == 2
+        enrage_color = (150, 0, 0) if is_enraged else None
+
         if self.type == 'mayon':
-            color = (255, 69, 0) if self.state == 'spewing' else (74, 74, 74)
+            color = (255, 69, 0) if self.state == 'spewing' else (enrage_color or (74, 74, 74))
             pygame.draw.polygon(surface, color, [(draw_rect.left, draw_rect.bottom), (draw_rect.centerx, draw_rect.top), (draw_rect.right, draw_rect.bottom)])
             pygame.draw.polygon(surface, (255, 69, 0), [(draw_rect.centerx - 10, draw_rect.top + 20), (draw_rect.centerx, draw_rect.top), (draw_rect.centerx + 10, draw_rect.top + 20)])
         elif self.type == 'igorot':
-            pygame.draw.rect(surface, (139, 69, 19), draw_rect)
+            pygame.draw.rect(surface, enrage_color or (139, 69, 19), draw_rect)
             pygame.draw.rect(surface, (255, 0, 0), (draw_rect.x + 10, draw_rect.y + 10, 60, 20))
         elif self.type == 'carabao':
-            pygame.draw.rect(surface, (105, 105, 105), draw_rect)
+            pygame.draw.rect(surface, enrage_color or (105, 105, 105), draw_rect)
             pygame.draw.polygon(surface, WHITE, [(draw_rect.left, draw_rect.top), (draw_rect.left - 20, draw_rect.top - 10), (draw_rect.left + 10, draw_rect.top)])
             pygame.draw.polygon(surface, WHITE, [(draw_rect.right, draw_rect.top), (draw_rect.right + 20, draw_rect.top - 10), (draw_rect.right - 10, draw_rect.top)])
         elif self.type == 'bakunawa':
-            pygame.draw.ellipse(surface, (0, 0, 139), draw_rect)
+            pygame.draw.ellipse(surface, enrage_color or (0, 0, 139), draw_rect)
             pygame.draw.rect(surface, (255, 215, 0), (draw_rect.x + 20, draw_rect.y + 20, 40, 40), 2)
         else:
-            pygame.draw.rect(surface, (47, 79, 79), draw_rect)
+            pygame.draw.rect(surface, enrage_color or (47, 79, 79), draw_rect)
             pygame.draw.circle(surface, RED, (draw_rect.centerx, draw_rect.centery), 25)
+            
+        if is_enraged and (time // 150) % 2 == 0:
+            # Draw furious enrage aura
+            pygame.draw.rect(surface, RED, draw_rect, 4)
 
-        # Health Bar
-        pygame.draw.rect(surface, RED, (draw_rect.x, draw_rect.y - 15, 80, 5))
-        health_width = max(0, int(80 * (self.health / self.max_health)))
-        pygame.draw.rect(surface, GREEN, (draw_rect.x, draw_rect.y - 15, health_width, 5))
+        # Boss health bar is now handled in HUD

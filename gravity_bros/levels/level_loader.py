@@ -1,5 +1,5 @@
 import random
-from entities.items import Platform, Block, Coin, Gem, Star, PowerUp, Portal, Scenery
+from entities.items import Platform, Block, Coin, Gem, Star, PowerUp, Portal, Scenery, Spike, FallingPlatform, Checkpoint, HiddenPortal
 from entities.enemy import Enemy
 from entities.boss import Boss
 from .themes import get_boss_type
@@ -15,6 +15,9 @@ def build_level(level, difficulty):
     stars = []
     power_ups = []
     scenery = []
+    hazards = []
+    checkpoints = []
+    hidden_portals = []
     
     enemy_spawn_chance = 0.2 if difficulty == 'easy' else (0.6 if difficulty == 'hard' else 0.4)
     
@@ -41,7 +44,12 @@ def build_level(level, difficulty):
             y = 450 - (random.random() * 300)
 
         current_x += gap
-        platforms.append(Platform(current_x, y, width, 800 - y))
+        if random.random() > 0.8:
+            platforms.append(FallingPlatform(current_x, y, width, 800 - y))
+        else:
+            platforms.append(Platform(current_x, y, width, 800 - y))
+            if random.random() > 0.8:
+                hazards.append(Spike(current_x + width/2 - 16, y - 16))
 
         if random.random() > 0.6:
             if level == 1: scenery.append(Scenery(current_x + random.random() * width, y, 'rice_stalk'))
@@ -50,7 +58,11 @@ def build_level(level, difficulty):
             elif level == 9: scenery.append(Scenery(current_x + width/2, y, 'lamp'))
         
         if random.random() > (1 - enemy_spawn_chance) and width > 100 and current_x < level_length - 800:
-            e_type = 'walker' if random.random() > 0.5 else 'hopper'
+            rnd = random.random()
+            if rnd > 0.8: e_type = 'archer'
+            elif rnd > 0.6: e_type = 'shielded'
+            elif rnd > 0.3: e_type = 'hopper'
+            else: e_type = 'walker'
             enemies.append(Enemy(current_x + width / 2, y - 24, e_type, difficulty))
             
         if random.random() > 0.3:
@@ -69,6 +81,12 @@ def build_level(level, difficulty):
         if random.random() > 0.6:
             blocks.append(Block(current_x + width / 2 - 16, y - 120))
             
+        if random.random() > 0.95 and current_x > 1000:
+            checkpoints.append(Checkpoint(current_x + width / 2, y))
+            
+        if random.random() > 0.97 and current_x > 800:
+            hidden_portals.append(HiddenPortal(current_x + width / 2, y - 80))
+            
         current_x += width
         
     # Arena
@@ -85,4 +103,14 @@ def build_level(level, difficulty):
     bosses.append(Boss(arena_x + 800, 370, boss_type, difficulty))
     portal = Portal(arena_x + 1200, 370)
     
-    return platforms, blocks, enemies, bosses, coins, gems, stars, power_ups, portal, scenery
+    # Bonus Room Generation at Y = -2000
+    bx = 0
+    by = -2000
+    platforms.append(Platform(bx, by + 400, 800, 600))
+    for i in range(10):
+        coins.append(Coin(bx + 100 + i * 50, by + 300))
+        if i % 3 == 0: gems.append(Gem(bx + 100 + i * 50, by + 200))
+    # Return portal back to normal spawn
+    hidden_portals.append(HiddenPortal(bx + 700, by + 320))
+
+    return platforms, blocks, enemies, bosses, coins, gems, stars, power_ups, portal, scenery, hazards, checkpoints, hidden_portals

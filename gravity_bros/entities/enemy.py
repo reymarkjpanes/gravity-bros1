@@ -17,20 +17,42 @@ class Enemy:
         self.stun_timer = 0
         if type == 'flyer':
             self.vx = -1.5 * speed_mult
+        elif type == 'archer':
+            self.vx = 0
+            self.shoot_timer = random.randint(60, 120)
+        elif type == 'shielded':
+            self.shield_hp = 1
             
         self.images = {}
         assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images')
-        for e_type in ['walker', 'hopper']:
+        for e_type in ['walker', 'hopper', 'archer', 'shielded', 'kapre', 'igorot', 'carabao']:
             for d in ['left', 'right']:
-                path = os.path.join(assets_dir, f'enemy_{e_type}_{d}.png')
+                path = os.path.join(assets_dir, f'enemy_{e_type}_idle_{d}.png')
+                if not os.path.exists(path): # fallback
+                    path = os.path.join(assets_dir, f'enemy_{e_type}_{d}.png')
                 if os.path.exists(path):
                     self.images[f'{e_type}_{d}'] = pygame.image.load(path).convert_alpha()
 
-    def update(self, platforms, blocks):
+    def update(self, platforms, blocks, projectiles=None, players=None):
         if self.dead or self.type == 'stunned': return
         if self.stun_timer > 0:
             self.stun_timer -= 1
             return
+
+        if self.type == 'archer' and projectiles is not None and players:
+            self.shoot_timer -= 1
+            if self.shoot_timer <= 0:
+                self.shoot_timer = random.randint(100, 150)
+                closest = None
+                md = 99999
+                for p in players:
+                    if not p.dead:
+                        d = abs(p.rect.x - self.rect.x)
+                        if d < md: md, closest = d, p
+                if closest and md < 600:
+                    from entities.items import Projectile
+                    d_x = 1 if closest.rect.x > self.rect.x else -1
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, d_x * 5, 0, 'book'))
 
         if self.type == 'flyer':
             self.rect.x += self.vx
@@ -86,5 +108,10 @@ class Enemy:
         if img:
             surface.blit(img, (self.rect.x - camera_x, self.rect.y))
         else:
-            # Fallback
-            pygame.draw.rect(surface, (139, 69, 19), (self.rect.x - camera_x, self.rect.y, 24, 24))
+            c = (139, 69, 19)
+            if self.type == 'shielded': c = (100, 100, 150)
+            elif self.type == 'archer': c = (100, 150, 100)
+            pygame.draw.rect(surface, c, (self.rect.x - camera_x, self.rect.y, 24, 24))
+            
+        if self.type == 'shielded':
+            pygame.draw.rect(surface, (200, 200, 200), (self.rect.x - camera_x - 4, self.rect.y, 8, 24))
