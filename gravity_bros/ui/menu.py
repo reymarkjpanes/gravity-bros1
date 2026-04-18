@@ -91,6 +91,10 @@ def draw_level_select(screen, font, unlocked_levels, selected_level, difficulty,
         
         text = font.render(d.upper(), True, WHITE if is_active else (150, 150, 150))
         screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+    
+    # Navigation hints
+    nav_hint = font.render("[S] Store   [X] Skill Tree   [ENTER] Select Level   [ESC] Back", True, (120, 120, 140))
+    screen.blit(nav_hint, (WIDTH//2 - nav_hint.get_width()//2, HEIGHT - 30))
 
 def draw_mission_briefing(screen, font, big_font, level, difficulty, theme_name):
     screen.fill((20, 20, 30))

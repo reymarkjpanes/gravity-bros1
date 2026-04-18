@@ -320,54 +320,80 @@ class Player(pygame.sprite.Sprite):
         for _ in range(10):
             particles.append(Particle(self.rect.centerx, self.rect.centery, color=(255, 215, 0)))
         
-        if ch == 'Juan': # Guava Rest
+        if ch == 'Juan': # Guava Rest — brief invincibility + stun nearby enemies
             self.ability_timer = 120
             self.max_cooldown = 500
             self.invincibility_timer = 150
+            for e in enemies:
+                if abs(e.rect.centerx - self.rect.centerx) < 150: e.stun_timer = 120
             sounds.play('jump')
-        elif ch == 'Maria': # Fan Shield
+        elif ch == 'Maria': # Fan Shield — blocks projectiles
             self.ability_timer = 200
             self.max_cooldown = 600
             self.shield_active = True
-        elif ch == 'LapuLapu': # Mactan Strike
-            self.dash_timer = 15
+        elif ch == 'LapuLapu': # Mactan Strike — forward slash dealing boss damage
+            self.dash_timer = 20
+            self.is_dashing = True
             self.max_cooldown = 300
-            self.invincibility_timer = 15
-        elif ch == 'Jose': # Noli Projectile
+            self.invincibility_timer = 20
+            self.melee_timer = 20  # Wide hitbox active during dash strike
+            for b in bosses:
+                if abs(b.rect.centerx - self.rect.centerx) < 200 and b.invincible_timer <= 0:
+                    b.health -= 3
+                    b.invincible_timer = 30
+                    self._requested_shake = 8
+        elif ch == 'Jose': # Noli Projectile — magic book shot
             self.max_cooldown = 150
-            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 12, 0, 'book'))
-        elif ch == 'Andres': # Rage Mode
+            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 14, 0, 'book'))
+            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 14, -3, 'book'))
+        elif ch == 'Andres': # Rage Mode — speed + melee damage burst
             self.ability_timer = 300
             self.max_cooldown = 800
-        elif ch == 'Aswang': # Life Steal (Buff)
+            for e in enemies:
+                if abs(e.rect.centerx - self.rect.centerx) < 100: e.dead = True
+            for b in bosses:
+                if abs(b.rect.centerx - self.rect.centerx) < 120 and b.invincible_timer <= 0:
+                    b.health -= 2; b.invincible_timer = 20
+        elif ch == 'Aswang': # Life Steal — kill nearest enemy and restore invincibility
             self.ability_timer = 300
             self.max_cooldown = 600
+            nearest = min(enemies, key=lambda e: abs(e.rect.x - self.rect.x), default=None)
+            if nearest and not nearest.dead:
+                nearest.dead = True
+                self.invincibility_timer = 180
         elif ch == 'Tikbalang': # Instant Mega Jump
             self.vel_y = -25 * self.gravity_dir
             self.on_ground = False
             self.max_cooldown = 150
             sounds.play('jump')
-        elif ch == 'Kapre': # Smoke Screen
+        elif ch == 'Kapre': # Smoke Screen — stuns all nearby enemies + bosses
             self.max_cooldown = 600
             for _ in range(30):
                 particles.append(Particle(self.rect.centerx, self.rect.centery, (100, 100, 100), size=10))
-        elif ch == 'Datu': # Twin Fire
+            for e in enemies:
+                if abs(e.rect.centerx - self.rect.centerx) < 250: e.stun_timer = 200
+            for b in bosses:
+                if abs(b.rect.centerx - self.rect.centerx) < 250: b.stun_timer = 120
+        elif ch == 'Datu': # Twin Fire — fires two fireballs that hit bosses
             self.max_cooldown = 120
-            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 8, -5, 'fireball'))
-            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 8, 5, 'fireball'))
-        elif ch == 'Sorbetero': # Brain Freeze
+            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 10, -5, 'fireball'))
+            projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 10, 5, 'fireball'))
+        elif ch == 'Sorbetero': # Brain Freeze — stun all enemies + bosses
             self.max_cooldown = 800
             for e in enemies: e.stun_timer = 180
             for b in bosses: b.stun_timer = 180
             self._requested_shake = 5
-        elif ch == 'Taho': # Arnibal Splash (Initiate)
+        elif ch == 'Taho': # Arnibal Slam — ground pound that hurts nearby bosses
             if not self.on_ground:
                 self.vel_y = 20 * self.gravity_dir
                 self.max_cooldown = 400
+                for b in bosses:
+                    if abs(b.rect.centerx - self.rect.centerx) < 150 and b.invincible_timer <= 0:
+                        b.health -= 2; b.invincible_timer = 20
             else:
-                return # Did not activate, don't trigger cooldown
+                return False  # Did not activate
         else:
-            return False # Passive character or unmapped, no active skill
+            return False  # Passive character or unmapped
         
         self.ability_cooldown = self.max_cooldown
         

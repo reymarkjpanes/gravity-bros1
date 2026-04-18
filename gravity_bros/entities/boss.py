@@ -30,6 +30,11 @@ class Boss:
         self.state_timer = 0
         self.phase = 1
         self.stun_timer = 0
+        
+        # Boss arena boundaries (boss stays within 700px of spawn point)
+        arena_half = 700
+        self.arena_left  = x - arena_half
+        self.arena_right = x + arena_half + self.rect.width
 
     def update(self, platforms, blocks, player, enemies, projectiles):
         if self.dead: return
@@ -39,6 +44,11 @@ class Boss:
 
         if self.invincible_timer > 0: self.invincible_timer -= 1
         if self.state_timer > 0: self.state_timer -= 1
+        
+        # Check health from external damage (projectiles, melee, skills)
+        if self.health <= 0 and not self.dead:
+            self.dead = True
+            sounds.play('coin')
 
         self.minion_timer -= 1
         if self.minion_timer <= 0:
@@ -129,6 +139,14 @@ class Boss:
 
         if self.state_timer <= 0 and self.state not in ['idle', 'diving']:
             self.state = 'idle'
+
+        # Hard-clamp boss inside its designated arena
+        if self.rect.left < self.arena_left:
+            self.rect.left = self.arena_left
+            self.vx = abs(self.vx)  # Bounce right
+        if self.rect.right > self.arena_right:
+            self.rect.right = self.arena_right
+            self.vx = -abs(self.vx)  # Bounce left
 
     def take_damage(self, player):
         self.health -= 1

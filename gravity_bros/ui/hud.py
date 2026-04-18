@@ -75,6 +75,13 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosse
         
         boss_name = font.render(boss.type.replace('_', ' ').upper(), True, WHITE)
         screen.blit(boss_name, (WIDTH // 2 - boss_name.get_width() // 2, HEIGHT - 70))
+        
+        hp_txt = font.render(f"HP: {max(0, boss.health)} / {boss.max_health}", True, (255, 100, 100))
+        screen.blit(hp_txt, (bx + bw + 10, by))
+        
+        if getattr(boss, 'phase', 1) == 2:
+            enrage_txt = font.render("! ENRAGED !", True, RED)
+            screen.blit(enrage_txt, (WIDTH // 2 - enrage_txt.get_width() // 2, HEIGHT - 95))
 
 def draw_minimap(screen, platforms, player, bosses, portal, current_level):
     map_w = 200
@@ -109,19 +116,20 @@ def draw_pause_menu(screen, font, big_font):
     screen.blit(p_text, (WIDTH//2 - p_text.get_width()//2, 100))
     
     c1 = font.render("--- CONTROLS ---", True, (0, 255, 255))
-    c2 = font.render("Move: W,A,S,D or Arrow Keys", True, WHITE)
+    c2 = font.render("Move: A/D or LEFT/RIGHT", True, WHITE)
     c3 = font.render("Jump: W or UP Arrow", True, WHITE)
-    c4 = font.render("Shoot: F  |  Ability: E", True, WHITE)
-    c5 = font.render("Gravity Flip: G", True, (255, 100, 100))
-    c6 = font.render("Swap Weapons: 1, 2, 3", True, WHITE)
-    c7 = font.render("Cheats Menu: C", True, WHITE)
-    c8 = font.render("Quit to Menu: Q", True, ORANGE)
+    c4 = font.render("Shoot: F  |  Unique Skill: E", True, WHITE)
+    c5 = font.render("Melee Attack: Q", True, (255, 200, 0))
+    c6 = font.render("Gravity Dash: CTRL", True, (0, 200, 255))
+    c7 = font.render("Flip Gravity: G", True, (255, 100, 100))
+    c8 = font.render("Swap Weapons: 1, 2, 3", True, WHITE)
+    c9 = font.render("Cheats: C  |  Quit to Menu: Q (while paused)", True, ORANGE)
     
-    for i, t in enumerate([c1, c2, c3, c4, c5, c6, c7, c8]):
-        screen.blit(t, (WIDTH//2 - t.get_width()//2, 200 + i * 40))
+    for i, t in enumerate([c1, c2, c3, c4, c5, c6, c7, c8, c9]):
+        screen.blit(t, (WIDTH//2 - t.get_width()//2, 185 + i * 38))
     
     r_text = font.render("Press 'ESC' or 'P' to Resume", True, RED)
-    screen.blit(r_text, (WIDTH//2 - r_text.get_width()//2, HEIGHT - 80))
+    screen.blit(r_text, (WIDTH//2 - r_text.get_width()//2, HEIGHT - 50))
 
 def draw_game_over(screen, font, big_font):
     go_text = big_font.render("GAME OVER", True, RED)

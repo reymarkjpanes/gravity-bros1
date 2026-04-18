@@ -11,6 +11,7 @@ from levels.themes import get_theme
 from ui.menu import draw_main_menu, draw_level_select, draw_mission_briefing
 from ui.store import draw_store
 from ui.hud import draw_hud, draw_minimap, draw_pause_menu, draw_game_over, draw_level_cleared
+from ui.skill_tree import draw_skill_tree, apply_skill_buffs, SKILLS
 from ui.cheat_menu import CheatMenu
 from entities.player import Player
 from entities.items import Projectile, Particle
@@ -50,6 +51,8 @@ class GameEngine:
         self.selected_pet = 'None'
         self.unlocked_upgrades = []
         self.unlocked_evolutions = []
+        self.unlocked_skills = []
+        self.skill_points = 0
 
         saved_data = load_game()
         if saved_data:
@@ -71,6 +74,8 @@ class GameEngine:
             self.selected_pet = saved_data.get('selected_pet', 'None')
             self.unlocked_upgrades = saved_data.get('unlocked_upgrades', [])
             self.unlocked_evolutions = saved_data.get('unlocked_evolutions', [])
+            self.unlocked_skills = saved_data.get('unlocked_skills', [])
+            self.skill_points = saved_data.get('skill_points', 0)
 
         self.mm_selection = 0
         self.store_tab = 0
@@ -95,12 +100,14 @@ class GameEngine:
             'unlocked_pets': self.unlocked_pets,
             'selected_pet': self.selected_pet,
             'unlocked_upgrades': self.unlocked_upgrades,
-            'unlocked_evolutions': self.unlocked_evolutions
+            'unlocked_evolutions': self.unlocked_evolutions,
+            'unlocked_skills': self.unlocked_skills,
+            'skill_points': self.skill_points
         })
 
     def run(self):
         while True:
-            if self.app_state in ['MAIN_MENU', 'LEVEL_SELECT', 'STORE', 'MISSION_BRIEFING', 'MODES', 'SETTINGS']:
+            if self.app_state in ['MAIN_MENU', 'LEVEL_SELECT', 'STORE', 'MISSION_BRIEFING', 'MODES', 'SETTINGS', 'SKILL_TREE']:
                 self.run_menu()
             elif self.app_state == 'GAME':
                 self.run_game(game_mode='STORY')
@@ -147,6 +154,9 @@ class GameEngine:
                     c = GOLD if self.mode_selection == i else WHITE
                     txt = self.font.render(op, True, c)
                     self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, 250 + i * 60))
+            elif self.app_state == 'SKILL_TREE':
+                if not hasattr(self, 'st_selection'): self.st_selection = 0
+                draw_skill_tree(self.screen, self.font, self.big_font, self.unlocked_skills, self.skill_points, self.st_selection)
 
             pygame.display.flip()
             
@@ -189,6 +199,7 @@ class GameEngine:
                     
                     elif self.app_state == 'LEVEL_SELECT':
                         if event.key == pygame.K_s: self.app_state = 'STORE'
+                        elif event.key == pygame.K_x: self.app_state = 'SKILL_TREE'; self.st_selection = 0
                         elif event.key == pygame.K_ESCAPE: self.app_state = 'MAIN_MENU'
                         elif event.key == pygame.K_LEFT: self.selected_level = max(1, self.selected_level - 1)
                         elif event.key == pygame.K_RIGHT: self.selected_level = min(10, self.selected_level + 1)
@@ -209,6 +220,30 @@ class GameEngine:
                         elif event.key == pygame.K_ESCAPE:
                             self.app_state = 'LEVEL_SELECT'
                             
+                    elif self.app_state == 'SKILL_TREE':
+                        if not hasattr(self, 'st_selection'): self.st_selection = 0
+                        if event.key == pygame.K_ESCAPE: self.app_state = 'LEVEL_SELECT'
+                        elif event.key == pygame.K_UP: self.st_selection = max(0, self.st_selection - 1)
+                        elif event.key == pygame.K_DOWN: self.st_selection = min(len(SKILLS) - 1, self.st_selection + 1)
+                        elif event.key == pygame.K_1:
+                            # Jump to first skill in branch 0
+                            idxs = [i for i, s in enumerate(SKILLS) if s['branch'] == 0]
+                            if idxs: self.st_selection = idxs[0]
+                        elif event.key == pygame.K_2:
+                            idxs = [i for i, s in enumerate(SKILLS) if s['branch'] == 1]
+                            if idxs: self.st_selection = idxs[0]
+                        elif event.key == pygame.K_3:
+                            idxs = [i for i, s in enumerate(SKILLS) if s['branch'] == 2]
+                            if idxs: self.st_selection = idxs[0]
+                        elif event.key == pygame.K_RETURN:
+                            sk = SKILLS[self.st_selection]
+                            req = sk.get('requires')
+                            if sk['id'] not in self.unlocked_skills:
+                                if (req is None or req in self.unlocked_skills) and self.skill_points >= sk['cost']:
+                                    self.skill_points -= sk['cost']
+                                    self.unlocked_skills.append(sk['id'])
+                                    self._save_current_state()
+                                    sounds.play('coin')
                     elif self.app_state == 'STORE':
                         if event.key == pygame.K_s or event.key == pygame.K_ESCAPE: self.app_state = 'LEVEL_SELECT'
                         elif event.key == pygame.K_1: self.store_tab = 0; self.store_selection = 0
@@ -330,11 +365,18 @@ class GameEngine:
                         if event.key == pygame.K_RETURN: dialogue.advance()
                         continue
                         
-                    if event.key == pygame.K_q and is_paused:
-                        self.app_state = 'MAIN_MENU'
-                        return
+                    # ---- PAUSED STATE KEYS ----
+                    if is_paused:
+                        if event.key == pygame.K_q:
+                            self.app_state = 'MAIN_MENU'
+                            return
+                        if event.key == pygame.K_p or event.key == pygame.K_ESCAPE:
+                            is_paused = False
+                        continue  # Block all other keys while paused
+                    
+                    # ---- GAMEPLAY KEYS ----
                     if event.key == pygame.K_p or event.key == pygame.K_ESCAPE:
-                        is_paused = not is_paused
+                        is_paused = True
                     if (event.key == pygame.K_w or event.key == pygame.K_UP) and not player.dead:
                         player.jump(is_immortal, is_flappy)
                     if event.key == pygame.K_r and player.dead:
@@ -360,10 +402,10 @@ class GameEngine:
                     if event.key == pygame.K_g and not player.dead:
                         if not g_pressed: player.flip_gravity(); g_pressed = True
                         
-                    if event.key == pygame.K_q and not player.dead and not is_paused:
+                    if event.key == pygame.K_q and not player.dead:
                         player.melee_attack()
                         
-                    if (event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT) and not player.dead:
+                    if (event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL) and not player.dead:
                         player.dash()
                             
                     if event.key == pygame.K_e and not player.dead:
@@ -434,6 +476,9 @@ class GameEngine:
             else:
                 f_pressed = False
 
+            # Always compute boss state every frame
+            all_bosses_defeated = (len(bosses) == 0) or all(b.dead for b in bosses)
+
             # Update Logic
             if skill_cutscene_timer > 0:
                 skill_cutscene_timer -= 1
@@ -457,6 +502,7 @@ class GameEngine:
                     while self.global_xp >= self.global_level * 1000:
                         self.global_xp -= self.global_level * 1000
                         self.global_level += 1
+                        self.skill_points += 1  # Earn 1 Skill Point per global level-up!
                         
                     self._save_current_state()
                     self.app_state = 'LEVEL_SELECT'
@@ -470,6 +516,7 @@ class GameEngine:
                         
                 alive_players = [player] if not player.dead else []
                 if not player.dead:
+                    apply_skill_buffs(player, self.unlocked_skills)
                     effects = player.update(platforms, enemies, bosses, blocks, coins, gems, stars_col, power_ups, is_immortal, particles, projectiles, HEIGHT)
                     
                     # Check Hazards
@@ -488,10 +535,20 @@ class GameEngine:
                     if e.dead: enemies.remove(e)
                 for b in bosses: 
                     pre_health = b.health
+                    was_dead = b.dead
                     b.update(platforms, blocks, player, enemies, projectiles)
                     if b.health < pre_health:
                         screen_shake = max(screen_shake, 5)
                         hit_stop = max(hit_stop, 3) # Freeze frame on boss hit
+                    if b.dead and not was_dead:
+                        # Boss just died! Big explosion party!
+                        player.score += 5000
+                        player.coins += 50
+                        screen_shake = 25
+                        hit_stop = 20
+                        for _ in range(60):
+                            particles.append(Particle(b.rect.centerx, b.rect.centery, (255, random.randint(50,200), 0)))
+                            particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 255, 255), 8))
                 for b in blocks: 
                     if hasattr(b, 'update'): b.update()
                 for p in platforms:
@@ -501,7 +558,7 @@ class GameEngine:
                     active_pet.update(player, enemies, coins)
                 
                 for p in projectiles[:]:
-                    p.update(platforms, blocks, enemies)
+                    p.update(platforms, blocks, enemies, bosses)
                     if p.dead: projectiles.remove(p)
                 
                 for p in particles[:]:
@@ -524,9 +581,9 @@ class GameEngine:
                             player.rect.y = -1900
                             player.vel_y = 0
 
-                all_bosses_defeated = all(b.dead for b in bosses)
-                if not player.dead and player.rect.colliderect(portal.rect) and all_bosses_defeated:
+                if not player.dead and all_bosses_defeated and player.rect.colliderect(portal.rect):
                     sounds.play('coin')
+                    player.score += 1000  # Bonus for completing level
                     level_complete = True
                     level_complete_timer = 120
 

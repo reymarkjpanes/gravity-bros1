@@ -185,7 +185,7 @@ class Projectile:
         self.type = p_type
         self.dead = False
 
-    def update(self, platforms, blocks, enemies):
+    def update(self, platforms, blocks, enemies, bosses=None):
         self.rect.x += self.vx
         self.rect.y += self.vy
 
@@ -197,7 +197,7 @@ class Projectile:
                 if self.type == 'fireball':
                     self.vy = -5
                 elif self.type == 'grenade':
-                    self._explode(enemies)
+                    self._explode(enemies, bosses)
                     self.dead = True
                 else:
                     self.dead = True
@@ -207,16 +207,24 @@ class Projectile:
             for e in enemies:
                 if not e.dead and self.rect.colliderect(e.rect):
                     if self.type == 'grenade':
-                        self._explode(enemies)
+                        self._explode(enemies, bosses)
                     else:
                         e.dead = True
+                    self.dead = True
+                    break
+                    
+        if not self.dead and bosses:
+            for b in bosses:
+                if not b.dead and b.invincible_timer <= 0 and self.rect.colliderect(b.rect):
+                    b.health -= 1
+                    b.invincible_timer = 15
                     self.dead = True
                     break
 
         if self.rect.y > 1400 or self.rect.y < -400:
             self.dead = True
 
-    def _explode(self, enemies):
+    def _explode(self, enemies, bosses=None):
         import math as _m
         for e in enemies:
             if not e.dead:
@@ -224,6 +232,14 @@ class Projectile:
                                 e.rect.centery - self.rect.centery)
                 if dist < 150:
                     e.dead = True
+        if bosses:
+            for b in bosses:
+                if not b.dead:
+                    dist = _m.hypot(b.rect.centerx - self.rect.centerx,
+                                    b.rect.centery - self.rect.centery)
+                    if dist < 150:
+                        b.health -= 3
+                        b.invincible_timer = 10
 
     def draw(self, surface, camera_x):
         r = self.rect.copy()

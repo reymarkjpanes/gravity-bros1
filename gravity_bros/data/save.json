@@ -1,13 +1,14 @@
 {
   "unlocked_levels": [
-    1
+    1,
+    2
   ],
-  "current_level": 1,
-  "score": 0,
-  "coins": 893500,
+  "current_level": 2,
+  "score": 6200,
+  "coins": 1088552,
   "gems": 0,
   "stars": 0,
-  "global_xp": 0,
+  "global_xp": 620,
   "global_level": 1,
   "unlocked_skins": [
     "Default"
@@ -15,20 +16,21 @@
   "selected_skin": "Default",
   "unlocked_characters": [
     "Juan",
-    "LapuLapu"
+    "Manananggal",
+    "LapuLapu",
+    "Sorbetero"
   ],
-  "selected_character": "LapuLapu",
+  "selected_character": "Sorbetero",
   "unlocked_powerups": [
     "None"
   ],
   "selected_powerup": "None",
   "unlocked_pets": [
-    "None",
-    "Tarsier"
+    "None"
   ],
-  "selected_pet": "Tarsier",
+  "selected_pet": "None",
   "unlocked_upgrades": [],
-  "unlocked_evolutions": [
-    "LapuLapu"
-  ]
+  "unlocked_evolutions": [],
+  "unlocked_skills": [],
+  "skill_points": 0
 }
