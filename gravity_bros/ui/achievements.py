@@ -16,11 +16,23 @@ class AchievementManager:
         
         # Define achievements
         self.registry = {
-            'first_blood': {'title': 'FIRST BLOOD', 'desc': 'Defeat your first enemy.', 'color': (255, 100, 100)},
-            'combo_10':    {'title': 'UNSTOPPABLE', 'desc': 'Reach a 10x Combo multiplier.', 'color': (255, 215, 0)},
-            'boss_killer': {'title': 'BOSS SLAYER', 'desc': 'Defeat a Boss character.', 'color': (200, 50, 255)},
-            'millionaire': {'title': 'PISO MILLIONAIRE', 'desc': 'Accumulate 1,000,000 Piso.', 'color': (100, 255, 100)},
-            'pacifist':    {'title': 'MARATHON', 'desc': 'Reach 5,000m distance in Endless.', 'color': (100, 200, 255)},
+            'first_blood':    {'title': 'FIRST BLOOD',           'desc': 'Defeat your first enemy.',              'color': (255, 100, 100)},
+            'combo_10':       {'title': 'UNSTOPPABLE',           'desc': 'Reach a 10x Combo multiplier.',         'color': (255, 215, 0)},
+            'combo_20':       {'title': 'RAMPAGE',               'desc': 'Reach a 20x Combo multiplier.',         'color': (255, 100, 0)},
+            'boss_killer':    {'title': 'BOSS SLAYER',           'desc': 'Defeat a Boss character.',              'color': (200, 50, 255)},
+            'millionaire':    {'title': 'PISO MILLIONAIRE',      'desc': 'Accumulate 1,000,000 Piso.',            'color': (100, 255, 100)},
+            'pacifist':       {'title': 'MARATHON',              'desc': 'Reach 5,000m distance in Endless.',     'color': (100, 200, 255)},
+            'no_death_clear': {'title': 'FLAWLESS',              'desc': 'Clear a level without dying.',          'color': (255, 255, 100)},
+            'three_stars':    {'title': 'PERFECTIONIST',         'desc': 'Get 3 stars on any level.',             'color': (255, 215, 0)},
+            'gravity_master': {'title': 'GRAVITY MASTER',        'desc': 'Flip gravity 50 times in one level.',   'color': (0, 200, 255)},
+            'wall_jumper':    {'title': 'WALL RUNNER',           'desc': 'Perform 10 wall jumps in one level.',   'color': (180, 180, 255)},
+            'skill_spammer':  {'title': 'SKILL SPAMMER',         'desc': 'Use your unique skill 10 times.',       'color': (100, 255, 200)},
+            'awaken_triple':  {'title': 'AWAKENED FURY',         'desc': 'Activate Awaken 3 times in one level.', 'color': (255, 200, 0)},
+            'collector':      {'title': 'TREASURE HUNTER',       'desc': 'Collect 500 total coins.',              'color': (248, 216, 32)},
+            'boss_rush_win':  {'title': 'BOSS RUSH CHAMPION',    'desc': 'Complete Boss Rush mode.',              'color': (200, 100, 255)},
+            'all_chars':      {'title': 'FULL ROSTER',           'desc': 'Unlock all 15 characters.',             'color': (0, 255, 200)},
+            'evolved':        {'title': 'ASCENDED',              'desc': 'Evolve a character for the first time.','color': (255, 180, 50)},
+            'melee_only':     {'title': 'BRAWLER',               'desc': 'Kill a boss using only melee attacks.', 'color': (255, 150, 100)},
         }
 
     def _ensure_fonts(self):

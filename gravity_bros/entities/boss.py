@@ -37,6 +37,7 @@ class Boss:
         self.target_y = y
         self.dash_speed = 0
         self.burst_count = 0
+        self.hit_flash = 0  # White flash frames on damage
         
         arena_half = 450
         self.arena_left  = x - arena_half
@@ -49,6 +50,7 @@ class Boss:
             return
 
         if self.invincible_timer > 0: self.invincible_timer -= 1
+        if self.hit_flash > 0: self.hit_flash -= 1
         if self.state_timer > 0: 
             self.state_timer -= 1
             if self.state_timer == 0 and self.state not in ['idle', 'slamming', 'diving']:
@@ -246,7 +248,7 @@ class Boss:
     def draw(self, surface, time, camera_x):
         if self.dead: return
         
-        if self.invincible_timer > 0 and (time // 100) % 2 == 0:
+        if self.invincible_timer > 0 and self.hit_flash <= 0 and (time // 100) % 2 == 0:
             return
 
         shake_x, shake_y = 0, 0
@@ -261,6 +263,16 @@ class Boss:
 
         is_enraged = getattr(self, 'phase', 1) == 2
         enrage_color = (150, 0, 0) if is_enraged else None
+
+        # Hit flash: draw white if recently damaged
+        if self.hit_flash > 0:
+            pygame.draw.rect(surface, (255, 255, 255), draw_rect)
+            expand = self.hit_flash
+            expanded = draw_rect.inflate(expand * 2, expand * 2)
+            flash_surf = pygame.Surface((expanded.width, expanded.height), pygame.SRCALPHA)
+            flash_surf.fill((255, 255, 255, min(200, self.hit_flash * 25)))
+            surface.blit(flash_surf, expanded.topleft)
+            return
 
         if self.type == 'mayon':
             color = (255, 69, 0) if self.state == 'erupting' else (enrage_color or (74, 74, 74))
@@ -287,5 +299,16 @@ class Boss:
             pygame.draw.rect(surface, enrage_color or (47, 79, 79), draw_rect)
             pygame.draw.circle(surface, RED, (draw_rect.centerx, draw_rect.centery), 25)
             
-        if is_enraged and (time // 150) % 2 == 0:
-            pygame.draw.rect(surface, RED, draw_rect, 4)
+        # Phase 2 visual effects
+        if is_enraged:
+            # Pulsing red border
+            pulse = abs(math.sin(time / 150.0)) 
+            border_w = 3 + int(pulse * 3)
+            pygame.draw.rect(surface, RED, draw_rect, border_w)
+            # Glowing eyes
+            eye_y = draw_rect.centery - 15
+            eye_glow = int(155 + pulse * 100)
+            pygame.draw.circle(surface, (eye_glow, 0, 0), (draw_rect.centerx - 15, eye_y), 6)
+            pygame.draw.circle(surface, (eye_glow, 0, 0), (draw_rect.centerx + 15, eye_y), 6)
+            pygame.draw.circle(surface, (255, 255, 100), (draw_rect.centerx - 15, eye_y), 3)
+            pygame.draw.circle(surface, (255, 255, 100), (draw_rect.centerx + 15, eye_y), 3)

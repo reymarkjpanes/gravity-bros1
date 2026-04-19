@@ -1,4 +1,5 @@
 import pygame
+import math
 from config import WIDTH, HEIGHT, STORE_ITEMS, GOLD, WHITE, GREEN, RED
 
 def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, unlocked_powerups, unlocked_pets, unlocked_upgrades, unlocked_evolutions, selected_character, selected_skin, selected_powerup, selected_pet, store_tab, store_selection):
@@ -20,8 +21,8 @@ def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, u
     coins_text = font.render(f"Piso: {total_coins}", True, GOLD)
     screen.blit(coins_text, (WIDTH - 200, 23))
 
-    esc_hint = font.render("[ESC] Back", True, (150, 150, 150))
-    screen.blit(esc_hint, (WIDTH//2 - 50, 25))
+    esc_hint = font.render("[ESC] Back  [TAB] Switch Tabs", True, (150, 150, 150))
+    screen.blit(esc_hint, (WIDTH//2 - 100, 25))
 
     tabs = [("CHARACTERS", 0), ("SKINS", 1), ("POWER", 2), ("PETS", 3), ("UPGRADE", 4), ("AWAKEN", 5)]
     for text, index in tabs:
@@ -174,6 +175,32 @@ def draw_store(screen, font, total_coins, unlocked_characters, unlocked_skins, u
                 t = detail_font.render(ln, True, (180, 180, 200))
                 screen.blit(t, (660, ly))
                 ly += 18
+            
+            # Character preview animation (simple breathing wobble)
+            preview_t = pygame.time.get_ticks()
+            bob = math.sin(preview_t * 0.003) * 3
+            char_colors = {
+                'Juan': (220, 180, 100), 'Maria': (255, 160, 190),
+                'LapuLapu': (200, 150, 50), 'Jose': (100, 150, 255),
+                'Andres': (180, 180, 180), 'Aswang': (180, 40, 60),
+                'Tikbalang': (130, 90, 40), 'Kapre': (60, 40, 20),
+                'Manananggal': (160, 0, 80), 'Datu': (255, 140, 0),
+                'Sorbetero': (200, 230, 255), 'Taho': (160, 90, 20),
+                'Malunggay': (0, 200, 50), 'Batak': (0, 180, 40),
+                'Jeepney': (255, 220, 0),
+            }
+            cc = char_colors.get(char_id, (200, 200, 200))
+            px, py = 420, int(430 + bob)
+            # Mini character sprite
+            pygame.draw.rect(screen, cc, (px, py, 24, 32))
+            pygame.draw.rect(screen, (255, 220, 180), (px + 4, py + 2, 16, 12))  # Face
+            pygame.draw.rect(screen, (0, 0, 0), (px + 6, py + 5, 3, 3))  # Eye L
+            pygame.draw.rect(screen, (0, 0, 0), (px + 14, py + 5, 3, 3))  # Eye R
+            # Bounce arrows
+            arrow_off = int(math.sin(preview_t * 0.008) * 5)
+            pygame.draw.polygon(screen, cc, [
+                (px + 12, py - 8 + arrow_off), (px + 6, py - 2 + arrow_off), (px + 18, py - 2 + arrow_off)
+            ])
         else:
             # Generic Detail
             bname = font.render(cur_item['name'].upper(), True, GOLD)

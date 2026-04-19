@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 from config import GOLD, WHITE, BLACK, ORANGE, DIRT_BROWN
 
 # Cache font for Block globally so it doesn't cause severe lag on draw calls.
@@ -42,26 +43,39 @@ class Block:
             surface.blit(text, (r.x + 8, r.y + 2))
 
 class Particle:
-    def __init__(self, x, y, color, size=4):
-        import random
+    # Pre-allocated surfaces for common sizes to reduce GC pressure
+    _surface_cache = {}
+    
+    def __init__(self, x, y, color, size=4, p_type='default'):
         self.x = x
         self.y = y
         self.vx = random.uniform(-3, 3)
         self.vy = random.uniform(-3, 3)
         self.color = color
-        self.size = random.randint(2, 5)
+        self.size = random.randint(2, max(2, size))
         self.life = 1.0
+        self.p_type = p_type
 
     def update(self):
         self.x += self.vx
         self.y += self.vy
+        if self.p_type == 'default':
+            self.vy += 0.05  # Slight gravity for natural feel
         self.life -= 0.02
 
     def draw(self, surface, camera_x):
         if self.life > 0:
-            s = pygame.Surface((self.size, self.size))
+            key = (self.size, self.color)
+            cached = Particle._surface_cache.get(key)
+            if cached is None:
+                cached = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+                cached.fill(self.color + (255,) if len(self.color) == 3 else self.color)
+                # Keep cache bounded
+                if len(Particle._surface_cache) > 200:
+                    Particle._surface_cache.clear()
+                Particle._surface_cache[key] = cached
+            s = cached.copy()
             s.set_alpha(int(self.life * 255))
-            s.fill(self.color)
             surface.blit(s, (self.x - camera_x, self.y))
 
 class Coin:
@@ -279,7 +293,7 @@ class Projectile:
                                 player.vel_x = -15 * player.facing
                                 player.vel_y = -10
                         else:
-                            player.die()
+                            player.take_hit()
                     self.dead = True
 
         if self.rect.y > 1400 or self.rect.y < -400:
@@ -466,6 +480,46 @@ class FallingPlatform:
             c = (255, 150, 150)
         pygame.draw.rect(surface, c, r)
         pygame.draw.rect(surface, BLACK, r, 2)
+
+class MovingPlatform:
+    """Platform that moves horizontally or vertically between two points."""
+    def __init__(self, x, y, w, h, move_type='horizontal', distance=200, speed=2):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.start_x = x
+        self.start_y = y
+        self.move_type = move_type  # 'horizontal' or 'vertical'
+        self.distance = distance
+        self.speed = speed
+        self.direction = 1
+        self.progress = 0  # 0 to distance
+
+    def update(self):
+        self.progress += self.speed * self.direction
+        if self.progress >= self.distance or self.progress <= 0:
+            self.direction *= -1
+        if self.move_type == 'horizontal':
+            self.rect.x = self.start_x + self.progress
+        else:
+            self.rect.y = self.start_y + self.progress
+
+    def draw(self, surface, camera_x, theme):
+        r = self.rect.copy()
+        r.x -= camera_x
+        # Moving platforms have a distinct look
+        pygame.draw.rect(surface, (100, 180, 255), r)
+        pygame.draw.rect(surface, (60, 120, 200), (r.x, r.y, r.width, 6))
+        pygame.draw.rect(surface, BLACK, r, 2)
+        # Direction arrow
+        cx = r.centerx
+        cy = r.centery
+        if self.move_type == 'horizontal':
+            pygame.draw.polygon(surface, (255, 255, 255), [
+                (cx - 5, cy), (cx + 5, cy - 4), (cx + 5, cy + 4)
+            ])
+        else:
+            pygame.draw.polygon(surface, (255, 255, 255), [
+                (cx, cy - 5), (cx - 4, cy + 5), (cx + 4, cy + 5)
+            ])
 
 class Pet:
     def __init__(self, type_name):

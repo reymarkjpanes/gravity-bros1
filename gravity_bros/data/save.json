@@ -11,13 +11,13 @@
     9,
     10
   ],
-  "current_level": 8,
-  "score": 147600,
-  "coins": 346999,
-  "gems": 21,
-  "stars": 8,
-  "global_xp": 7320,
-  "global_level": 17,
+  "current_level": 6,
+  "score": 194650,
+  "coins": 239809,
+  "gems": 30,
+  "stars": 9,
+  "global_xp": 115,
+  "global_level": 22,
   "unlocked_skins": [
     "Default"
   ],
@@ -38,16 +38,20 @@
     "Maria",
     "Taho"
   ],
-  "selected_character": "Taho",
+  "selected_character": "Jeepney",
   "unlocked_powerups": [
-    "None"
+    "None",
+    "mushroom"
   ],
   "selected_powerup": "None",
   "unlocked_pets": [
-    "None"
+    "None",
+    "Tarsier"
   ],
-  "selected_pet": "None",
-  "unlocked_upgrades": [],
+  "selected_pet": "Tarsier",
+  "unlocked_upgrades": [
+    "jump"
+  ],
   "unlocked_evolutions": [
     "Aswang",
     "Malunggay",
@@ -55,7 +59,8 @@
     "Manananggal",
     "Maria",
     "LapuLapu",
-    "Taho"
+    "Taho",
+    "Jeepney"
   ],
   "unlocked_skills": [
     "grav_flip_speed",
@@ -68,9 +73,11 @@
     "agil_jump",
     "agil_double_jump"
   ],
-  "skill_points": 1,
+  "skill_points": 11,
   "achievements_unlocked": [
     "first_blood",
     "boss_killer"
-  ]
+  ],
+  "high_scores": {},
+  "screen_shake_enabled": true
 }
