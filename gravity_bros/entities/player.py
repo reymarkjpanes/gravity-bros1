@@ -1354,7 +1354,7 @@ class Player(pygame.sprite.Sprite):
 
     def take_hit(self, particles=None, effects=None):
         """Take 1 HP of damage. Die if HP reaches 0."""
-        if self.invincibility_timer > 0 or self.dead:
+        if self.invincibility_timer > 0 or self.dead or self.is_immortal:
             return
         self.hp -= 1
         self.invincibility_timer = 90  # 1.5 seconds of iframes

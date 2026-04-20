@@ -88,9 +88,8 @@ def build_tutorial_level(difficulty):
     
     # Boss Arena
     arena_x = 4700
-    platforms.append(Platform(arena_x, 450, 200, 600))
-    platforms.append(Platform(arena_x + 300, 450, 200, 600))
-    platforms.append(Platform(arena_x + 600, 450, 800, 600))
+    # Create one continuous floor platform to prevent the boss from falling into gaps
+    platforms.append(Platform(arena_x, 450, 1400, 600))
     platforms.append(Platform(arena_x + 150, 320, 100, 20))
     platforms.append(Platform(arena_x + 450, 260, 100, 20))
     platforms.append(Platform(arena_x + 750, 320, 100, 20))

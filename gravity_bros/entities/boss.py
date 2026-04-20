@@ -62,6 +62,11 @@ class Boss:
             self.state_timer -= 1
             if self.state_timer == 0 and self.state not in ['idle', 'slamming', 'diving']:
                 self.state = 'idle'
+        
+        # Fall death protection
+        if self.rect.y > HEIGHT + 1200 or self.y_float > HEIGHT + 1200:
+            self.dead = True
+            
         if self.health <= 0 and not self.dead:
             self.dead = True
             sounds.play('coin')
@@ -107,11 +112,14 @@ class Boss:
         dist_to_player = player.rect.centerx - self.rect.centerx
         dir_to_player = 1 if dist_to_player > 0 else -1
 
+        # Proximity activation check (only move/attack if player is within 1200 pixels)
+        player_is_near = abs(dist_to_player) <= 1200
+
         if self.type == 'igorot': # 1. Igorot: Leaps and ground slams with shockwaves
-            if self.state == 'idle':
+            if self.state == 'idle' and player_is_near:
                 self.rect.x += self.vx
                 if self.rect.left < self.arena_left or self.rect.right > self.arena_right: self.vx *= -1
-            if attack_ready:
+            if attack_ready and player_is_near:
                 self.attack_timer = random.randint(60, 100) if self.phase == 1 else random.randint(40, 70)
                 if random.random() < 0.6:
                     self.state = 'slamming'
@@ -119,7 +127,7 @@ class Boss:
                     self.vx = dir_to_player * 6 # leap towards player
 
         elif self.type == 'carabao': # 2. Carabao: Relentless bull charge stuns on walls
-            if self.state == 'idle':
+            if self.state == 'idle' and player_is_near:
                 if attack_ready:
                     self.state = 'charging'
                     self.dash_speed = dir_to_player * (12 if self.phase == 1 else 18)
@@ -138,7 +146,7 @@ class Boss:
             self.y_float = self.target_y + math.sin(pygame.time.get_ticks() / 300.0) * 40
             self.rect.y = int(self.y_float)
             
-            if self.state == 'idle':
+            if self.state == 'idle' and player_is_near:
                 self.rect.x += self.vx
                 if self.rect.left < self.arena_left or self.rect.right > self.arena_right: self.vx *= -1
             
@@ -147,7 +155,7 @@ class Boss:
                 self.phase = 2
                 self.attack_timer = min(self.attack_timer, 60)
 
-            if attack_ready:
+            if attack_ready and player_is_near:
                 self.attack_timer = random.randint(80, 120) if self.phase == 2 else random.randint(120, 180)
                 self.state = 'spewing'
                 self.state_timer = 90
@@ -169,7 +177,7 @@ class Boss:
                 
         elif self.type == 'sirena': # 4. Sirena: Tracking Orbs
             if self.state == 'idle':
-                if attack_ready:
+                if attack_ready and player_is_near:
                     self.attack_timer = 80 if self.phase == 1 else 50
                     self.state = 'shooting'
                     self.burst_count = 3 if self.phase == 1 else 5
@@ -182,7 +190,7 @@ class Boss:
 
         elif self.type == 'mayon': # 5. Mayon: Eruption Artillery
             if self.state == 'idle':
-                if attack_ready:
+                if attack_ready and player_is_near:
                     self.state = 'erupting'
                     self.state_timer = 90
                     self.attack_timer = 150
@@ -194,7 +202,7 @@ class Boss:
 
         elif self.type == 'tikbalang': # 6. Tikbalang: Teleport Stomp
             if self.state == 'idle':
-                if attack_ready:
+                if attack_ready and player_is_near:
                     self.state = 'teleporting'
                     self.state_timer = 30
                     self.attack_timer = 90 if self.phase == 1 else 50
@@ -207,7 +215,7 @@ class Boss:
                     self.vel_y = 25 # Instant drop
                     
         elif self.type == 'dambuhala': # 7. Dambuhala: Slow massive tank
-            if self.state == 'idle':
+            if self.state == 'idle' and player_is_near:
                 self.rect.x += 1 if dir_to_player > 0 else -1 # Relentless walk
                 if attack_ready:
                     self.state = 'bubbles'
@@ -228,7 +236,7 @@ class Boss:
                 self.rect.x += (dest_x - self.rect.x) * 0.05
                 self.y_float += (dest_y - self.y_float) * 0.05
                 self.rect.y = int(self.y_float)
-                if attack_ready:
+                if attack_ready and player_is_near:
                     self.state = 'bullet_hell'
                     self.state_timer = 120 if self.phase == 1 else 180
                     self.attack_timer = 200
@@ -241,7 +249,7 @@ class Boss:
 
         elif self.type == 'kutsero': # 9. Kutsero: Bouncing wheels
             if self.state == 'idle':
-                if attack_ready:
+                if attack_ready and player_is_near:
                     self.state = 'whipping'
                     self.state_timer = 30
                     self.attack_timer = 60
@@ -251,7 +259,7 @@ class Boss:
 
         elif self.type == 'haring_ibon': # 10. Haring Ibon: Sky Dive & Storm
             self.vel_y = 0
-            if self.state == 'idle':
+            if self.state == 'idle' and player_is_near:
                 # Fly very high out of frame almost
                 dest_y = 50
                 self.y_float += (dest_y - self.y_float) * 0.05
