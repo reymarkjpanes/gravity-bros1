@@ -585,7 +585,7 @@ def _build_foreground(level, w, h):
     random.seed()
     return surf
 
-def draw_background(screen, level, camera_x, time):
+def draw_background(screen, level, camera_x, time, camera_y=0):
     layers = get_background(level)
     sky =  layers['sky']
     mid =  layers['mid']
@@ -596,18 +596,26 @@ def draw_background(screen, level, camera_x, time):
     mid_x = int(camera_x * 0.25) % mid.get_width()
     fg_x  = int(camera_x * 0.70) % fg.get_width()
     
+    # Vertical parallax offsets
+    mid_y = -int(camera_y * 0.15)
+    fg_y = -int(camera_y * 0.40)
+    near_y = -int(camera_y * 0.80)
+
+    # Sky (0.05x horizontal, no vertical or very subtle)
     screen.blit(sky, (-sky_x, 0))
     if sky_x > 0: screen.blit(sky, (sky.get_width() - sky_x, 0))
     
-    screen.blit(mid, (-mid_x, 0))
-    if mid_x > 0: screen.blit(mid, (mid.get_width() - mid_x, 0))
+    # Mid Layer
+    screen.blit(mid, (-mid_x, mid_y))
+    if mid_x > 0: screen.blit(mid, (mid.get_width() - mid_x, mid_y))
     
-    screen.blit(fg, (-fg_x, 0))
-    if fg_x > 0: screen.blit(fg, (fg.get_width() - fg_x, 0))
+    # Foreground Layer
+    screen.blit(fg, (-fg_x, fg_y))
+    if fg_x > 0: screen.blit(fg, (fg.get_width() - fg_x, fg_y))
     
-    # Near-foreground layer: scrolls FASTER than camera (1.2x) for depth
+    # Near-foreground layer: scrolls FASTER for depth
     if near:
         near_x = int(camera_x * 1.2) % near.get_width()
-        screen.blit(near, (-near_x, 0))
-        if near_x > 0: screen.blit(near, (near.get_width() - near_x, 0))
+        screen.blit(near, (-near_x, near_y))
+        if near_x > 0: screen.blit(near, (near.get_width() - near_x, near_y))
 

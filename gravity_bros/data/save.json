@@ -2,82 +2,42 @@
   "unlocked_levels": [
     1,
     2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10
+    3
   ],
-  "current_level": 3,
-  "score": 230950,
-  "coins": 440089,
-  "gems": 36,
-  "stars": 9,
-  "global_xp": 14280,
-  "global_level": 26,
+  "current_level": 1,
+  "score": 27100,
+  "coins": 598726,
+  "gems": 1,
+  "stars": 0,
+  "global_xp": 920,
+  "global_level": 4,
   "unlocked_skins": [
     "Default"
   ],
   "selected_skin": "Default",
   "unlocked_characters": [
     "Juan",
-    "Manananggal",
-    "LapuLapu",
-    "Sorbetero",
-    "Aswang",
-    "Tikbalang",
-    "Jose",
-    "Andres",
-    "Kapre",
-    "Malunggay",
-    "Jeepney",
-    "Batak",
-    "Maria",
-    "Taho"
+    "LapuLapu"
   ],
-  "selected_character": "Kapre",
+  "selected_character": "LapuLapu",
   "unlocked_powerups": [
-    "None",
-    "mushroom"
+    "None"
   ],
   "selected_powerup": "None",
   "unlocked_pets": [
-    "None",
-    "Tarsier"
+    "None"
   ],
-  "selected_pet": "Tarsier",
-  "unlocked_upgrades": [
-    "jump"
-  ],
+  "selected_pet": "None",
+  "unlocked_upgrades": [],
   "unlocked_evolutions": [
-    "Aswang",
-    "Malunggay",
-    "Andres",
-    "Manananggal",
-    "Maria",
-    "LapuLapu",
-    "Taho",
-    "Jeepney",
-    "Kapre"
+    "LapuLapu"
   ],
-  "unlocked_skills": [
-    "grav_flip_speed",
-    "grav_air_control",
-    "combat_proj",
-    "grav_cooldown",
-    "combat_melee",
-    "combat_dash",
-    "agil_speed",
-    "agil_jump",
-    "agil_double_jump"
-  ],
-  "skill_points": 20,
+  "unlocked_skills": [],
+  "skill_points": 12,
   "achievements_unlocked": [
     "first_blood",
-    "boss_killer"
+    "boss_killer",
+    "melee_only"
   ],
   "high_scores": {},
   "screen_shake_enabled": true

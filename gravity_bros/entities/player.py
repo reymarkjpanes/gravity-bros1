@@ -284,18 +284,21 @@ class Player(pygame.sprite.Sprite):
                     self.vel_x = -15 * self.facing
                     self.vel_y = -10
                     b.health -= 50
+                    b.hit_by_melee = True
                     effects['screen_shake'] = 20
                     for _ in range(30): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=10))
                 else:
                     self.take_hit(particles, effects)
             elif self.rect.colliderect(b.rect) and self.is_dashing and b.invincible_timer <= 0:
                 b.health -= 25
+                b.hit_by_melee = True
                 b.invincible_timer = 20
                 effects['hit_stop'] = 12
                 effects['screen_shake'] = 10
                 particles.append(Particle(b.rect.centerx, b.rect.centery, (0, 255, 255), 15))
             elif self.melee_timer > 0 and self.melee_hitbox.colliderect(b.rect) and b.invincible_timer <= 0:
                 b.health -= 50
+                b.hit_by_melee = True
                 b.invincible_timer = 20
                 effects['hit_stop'] = 15
                 effects['screen_shake'] = 12
@@ -675,7 +678,7 @@ class Player(pygame.sprite.Sprite):
             # Direct boss devastation
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 250 and b.invincible_timer <= 0:
-                    b.health -= 25
+                    b.health -= 35
                     b.invincible_timer = 35
                     b.stun_timer = 20
                     self._requested_shake = 12
@@ -692,7 +695,7 @@ class Player(pygame.sprite.Sprite):
             for vx_off, vy_off in spreads:
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    self.facing * (13 + vx_off), vy_off, 'book'))
+                    self.facing * (13 + vx_off), vy_off, 'book', damage=2))
             # Enlightenment aura (indigo + cyan)
             for _ in range(25):
                 particles.append(Particle(
@@ -723,7 +726,7 @@ class Player(pygame.sprite.Sprite):
             # Boss bolo strike
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 120 and b.invincible_timer <= 0:
-                    b.health -= 25; b.invincible_timer = 25
+                    b.health -= 40; b.invincible_timer = 25
             self._requested_shake = 14
             sounds.play('jump')
 
@@ -759,7 +762,7 @@ class Player(pygame.sprite.Sprite):
             # Deal boss drain damage too
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 100 and b.invincible_timer <= 0:
-                    b.health -= 10; b.invincible_timer = 15
+                    b.health -= 20; b.invincible_timer = 15
                     b.stun_timer = max(b.stun_timer, 60)
             sounds.play('jump')
 
@@ -803,7 +806,7 @@ class Player(pygame.sprite.Sprite):
                 e.stun_timer = 300
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 15; b.invincible_timer = 20
+                    b.health -= 25; b.invincible_timer = 20
                     b.stun_timer = max(b.stun_timer, 180)
             self._requested_shake = 6
             sounds.play('jump')
@@ -869,7 +872,7 @@ class Player(pygame.sprite.Sprite):
             for e in enemies: e.stun_timer = 250
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 10; b.invincible_timer = 20
+                    b.health -= 20; b.invincible_timer = 20
                     b.stun_timer = max(b.stun_timer, 150)
             for _ in range(60):
                 angle = _rnd.uniform(0, 6.28)
@@ -904,7 +907,7 @@ class Player(pygame.sprite.Sprite):
                         e.stun_timer = 200
                 for b in bosses:
                     if abs(b.rect.centerx - self.rect.centerx) < 200 and b.invincible_timer <= 0:
-                        b.health -= 15; b.invincible_timer = 25
+                        b.health -= 25; b.invincible_timer = 25
                 self._requested_shake = 9
                 sounds.play('jump')
             else:
@@ -972,7 +975,7 @@ class Player(pygame.sprite.Sprite):
             # Ram boss hard
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 400 and b.invincible_timer <= 0:
-                    b.health -= 20; b.invincible_timer = 30
+                    b.health -= 35; b.invincible_timer = 30
             # Exhaust smoke + chrome gleam particles
             for i in range(40):
                 particles.append(Particle(
@@ -1040,7 +1043,7 @@ class Player(pygame.sprite.Sprite):
                 angle = i * (6.28 / 12)
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    math.cos(angle) * 8, math.sin(angle) * 8, 'book', damage=3))
+                    math.cos(angle) * 8, math.sin(angle) * 8, 'book', damage=6))
             for _ in range(50):
                 particles.append(Particle(
                     self.rect.centerx + _rnd.randint(-60, 60),
@@ -1069,7 +1072,7 @@ class Player(pygame.sprite.Sprite):
             # Direct boss hit
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 300 and b.invincible_timer <= 0:
-                    b.health -= 30; b.invincible_timer = 40
+                    b.health -= 60; b.invincible_timer = 40
             self._requested_shake = 15
             sounds.play('jump')
 
@@ -1084,7 +1087,7 @@ class Player(pygame.sprite.Sprite):
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
                     math.cos(angle) * _rnd.uniform(6, 12),
-                    math.sin(angle) * _rnd.uniform(6, 12), 'book', damage=2))
+                    math.sin(angle) * _rnd.uniform(6, 12), 'book', damage=5))
             # Enlightenment aura burst
             for _ in range(60):
                 particles.append(Particle(
@@ -1103,7 +1106,7 @@ class Player(pygame.sprite.Sprite):
             # Devastate bosses
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 40; b.invincible_timer = 60
+                    b.health -= 90; b.invincible_timer = 60
                     b.stun_timer = max(b.stun_timer, 120)
             # Massive revolutionary explosion
             for i in range(80):
@@ -1130,7 +1133,7 @@ class Player(pygame.sprite.Sprite):
                     e.take_damage(5)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 20; b.invincible_timer = 30
+                    b.health -= 50; b.invincible_timer = 30
             # Dark swarm particles
             for _ in range(60):
                 particles.append(Particle(
@@ -1150,7 +1153,7 @@ class Player(pygame.sprite.Sprite):
                 e.stun_timer = max(e.stun_timer, 300)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 15; b.invincible_timer = 25
+                    b.health -= 40; b.invincible_timer = 25
                     b.stun_timer = max(b.stun_timer, 200)
             # Earth crack particles
             for i in range(50):
@@ -1171,7 +1174,7 @@ class Player(pygame.sprite.Sprite):
                 e.stun_timer = max(e.stun_timer, 400)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 20; b.invincible_timer = 30
+                    b.health -= 55; b.invincible_timer = 30
                     b.stun_timer = max(b.stun_timer, 240)
             # Thick dark smoke
             for _ in range(70):
@@ -1195,7 +1198,7 @@ class Player(pygame.sprite.Sprite):
                 angle = i * (6.28 / 16)
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    math.cos(angle) * 10, math.sin(angle) * 10, 'fireball', damage=3))
+                    math.cos(angle) * 10, math.sin(angle) * 10, 'fireball', damage=7))
             # Horror aura
             for _ in range(50):
                 particles.append(Particle(
@@ -1216,12 +1219,12 @@ class Player(pygame.sprite.Sprite):
                 speed = 9
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    math.cos(angle) * speed, math.sin(angle) * speed, 'fireball', damage=2))
+                    math.cos(angle) * speed, math.sin(angle) * speed, 'fireball', damage=6))
             for e in enemies:
                 e.stun_timer = max(e.stun_timer, 200)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 25; b.invincible_timer = 35
+                    b.health -= 50; b.invincible_timer = 35
             # Gold tribal explosion
             for _ in range(45):
                 particles.append(Particle(
@@ -1241,7 +1244,7 @@ class Player(pygame.sprite.Sprite):
                 e.take_damage(10)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 25; b.invincible_timer = 30
+                    b.health -= 65; b.invincible_timer = 30
                     b.stun_timer = max(b.stun_timer, 250)
             # Epic blizzard
             for _ in range(80):
@@ -1261,7 +1264,7 @@ class Player(pygame.sprite.Sprite):
                 e.take_damage(99)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 35; b.invincible_timer = 50
+                    b.health -= 85; b.invincible_timer = 50
             # Brown sugar wave particles
             for i in range(60):
                 particles.append(Particle(
@@ -1300,7 +1303,7 @@ class Player(pygame.sprite.Sprite):
                 vy_alt = _rnd.uniform(-4, 4)
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery - 5,
-                    self.facing * (14 + i * 0.8), vy_alt, 'gun', damage=4))
+                    self.facing * (14 + i * 0.8), vy_alt, 'gun', damage=9))
             # Poison cloud
             for _ in range(35):
                 particles.append(Particle(
@@ -1323,8 +1326,10 @@ class Player(pygame.sprite.Sprite):
                 e.take_damage(999)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 40; b.invincible_timer = 60
+                    b.health -= 110; b.invincible_timer = 60
+                    b.hit_by_melee = True
                     b.stun_timer = max(b.stun_timer, 120)
+
             # Massive exhaust + chrome explosion
             for i in range(60):
                 particles.append(Particle(
@@ -1439,25 +1444,24 @@ class Player(pygame.sprite.Sprite):
                         (_rnd.randint(200, 255), _rnd.randint(0, 60), _rnd.randint(0, 60)),
                         size=_rnd.randint(4, 10)))
 
-    def draw(self, surface, camera_x):
+    def draw(self, surface, camera_x, camera_y=0):
         if self.melee_timer > 0:
             slash_color = (255, 215, 0) if getattr(self, 'is_evolved', False) else (200, 255, 255)
             w = self.melee_timer * 3
             pygame.draw.arc(surface, slash_color, 
-                (self.melee_hitbox.x - camera_x - w//2, self.melee_hitbox.y - w//2, self.melee_hitbox.width + w, self.melee_hitbox.height + w),
+                (self.melee_hitbox.x - camera_x - w//2, self.melee_hitbox.y - camera_y - w//2, self.melee_hitbox.width + w, self.melee_hitbox.height + w),
                 -1.5 if self.facing == 1 else 1.5, 
                 1.5 if self.facing == 1 else 4.5, 4)
-                
                 
         if self.is_mounted:
             # Draw Tricycle Mount
             t_color = (200, 50, 50)
-            pygame.draw.rect(surface, t_color, (self.rect.x - camera_x - 10, self.rect.y + 10, 45, 25), border_radius=5)
+            pygame.draw.rect(surface, t_color, (self.rect.x - camera_x - 10, self.rect.y - camera_y + 10, 45, 25), border_radius=5)
             # Wheels
-            pygame.draw.circle(surface, (30,30,30), (self.rect.x - camera_x, self.rect.bottom), 8)
-            pygame.draw.circle(surface, (30,30,30), (self.rect.right - camera_x + 5, self.rect.bottom), 8)
+            pygame.draw.circle(surface, (30,30,30), (self.rect.x - camera_x, self.rect.bottom - camera_y), 8)
+            pygame.draw.circle(surface, (30,30,30), (self.rect.right - camera_x + 5, self.rect.bottom - camera_y), 8)
             # Draw player miniature head
-            pygame.draw.circle(surface, (255, 200, 150), (self.rect.centerx - camera_x, self.rect.top + 5), 8)
+            pygame.draw.circle(surface, (255, 200, 150), (self.rect.centerx - camera_x, self.rect.top - camera_y + 5), 8)
         else:
             char_key = self.selected_character.lower()
             
@@ -1495,7 +1499,7 @@ class Player(pygame.sprite.Sprite):
                 if ai['alpha'] > 0:
                     g = ai['img'].copy()
                     g.set_alpha(ai['alpha'])
-                    surface.blit(g, (ai['x'] - camera_x, ai['y']))
+                    surface.blit(g, (ai['x'] - camera_x, ai['y'] - camera_y))
                     ai['alpha'] -= ai['decay']
             # Clean up dead ghosts
             self._afterimages = [a for a in self._afterimages if a['alpha'] > 0]
@@ -1506,7 +1510,7 @@ class Player(pygame.sprite.Sprite):
                 if tf != self.facing: t_img = pygame.transform.flip(t_img, True, False)
                 if tg == -1 or self.dead: t_img = pygame.transform.flip(t_img, False, True)
                 t_img.set_alpha(alpha)
-                surface.blit(t_img, (tx - camera_x, ty))
+                surface.blit(t_img, (tx - camera_x, ty - camera_y))
 
             if self.dead or self.gravity_dir == -1:
                 img = pygame.transform.flip(img, False, True)
@@ -1538,21 +1542,22 @@ class Player(pygame.sprite.Sprite):
                 wobble_angle = math.sin(pygame.time.get_ticks() * 0.015) * 8 # ±8 degrees
                 img = pygame.transform.rotate(img, wobble_angle)
                 # Re-center after rotation offset
-                b_rect = img.get_rect(center=(self.rect.x - camera_x + self.rect.width//2, self.rect.y + self.rect.height//2))
+                b_rect = img.get_rect(center=(self.rect.x - camera_x + self.rect.width//2, self.rect.y - camera_y + self.rect.height//2))
                 surface.blit(img, b_rect.topleft)
             else:
-                surface.blit(img, (self.rect.x - camera_x, self.rect.y))
+                surface.blit(img, (self.rect.x - camera_x, self.rect.y - camera_y))
         else:
             # Fallback block
             draw_rect = self.rect.copy()
             draw_rect.x -= camera_x
+            draw_rect.y -= camera_y
             pygame.draw.rect(surface, (255, 0, 0), draw_rect)
         
         # ── Wall Slide Visual ──
         if self.on_wall != 0 and self.wall_slide_timer > 0:
             for i in range(3):
                 wx = self.rect.left - camera_x if self.on_wall == -1 else self.rect.right - camera_x
-                wy = self.rect.top + i * 10 + _rnd.randint(-2, 2)
+                wy = self.rect.top - camera_y + i * 10 + _rnd.randint(-2, 2)
                 pygame.draw.circle(surface, (200, 200, 200), (int(wx), int(wy)), _rnd.randint(2, 4))
             
         # Draw Character Label Tag above head (cached font)
@@ -1560,4 +1565,4 @@ class Player(pygame.sprite.Sprite):
         if _TAG_FONT is None:
             _TAG_FONT = pygame.font.SysFont("monospace", 14, bold=True)
         tag = _TAG_FONT.render(self.selected_character.upper(), True, (255, 255, 0))
-        surface.blit(tag, (self.rect.centerx - camera_x - tag.get_width()//2, self.rect.top - 20))
+        surface.blit(tag, (self.rect.centerx - camera_x - tag.get_width()//2, self.rect.top - camera_y - 20))

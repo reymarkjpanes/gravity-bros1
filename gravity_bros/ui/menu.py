@@ -1,7 +1,7 @@
 import pygame
 from config import WIDTH, HEIGHT, WHITE, GOLD, RED, GREEN
 
-def draw_main_menu(screen, font, big_font, mm_selection):
+def draw_main_menu(screen, font, big_font, mm_selection, reset_confirm=False):
     screen.fill((10, 15, 25))
     
     title1 = big_font.render("GRAVITY BROS:", True, WHITE)
@@ -10,17 +10,28 @@ def draw_main_menu(screen, font, big_font, mm_selection):
     screen.blit(title1, (WIDTH//2 - title1.get_width()//2, 120))
     screen.blit(title2, (WIDTH//2 - title2.get_width()//2, 170))
     
-    options = ["PLAY", "MODES", "STORE", "DATA", "SETTINGS", "QUIT"]
+    options = ["PLAY", "MODES", "STORE", "RESET DATA", "SETTINGS", "QUIT"]
     for i, opt in enumerate(options):
         is_selected = (mm_selection == i)
-        bg_col = (50, 50, 80) if is_selected else (30, 30, 40)
-        border_col = GOLD if is_selected else (100, 100, 100)
+        display_text = opt
+        
+        # Confirmation logic for Reset Data
+        if i == 3 and reset_confirm:
+            display_text = "ARE YOU SURE?"
+            bg_col = (100, 20, 20) if is_selected else (60, 10, 10)
+            border_col = RED if is_selected else (150, 50, 50)
+        else:
+            bg_col = (50, 50, 80) if is_selected else (30, 30, 40)
+            border_col = GOLD if is_selected else (100, 100, 100)
         
         rect = pygame.Rect(WIDTH//2 - 150, 240 + i * 55, 300, 45)
         pygame.draw.rect(screen, bg_col, rect, 0, 15)
         pygame.draw.rect(screen, border_col, rect, 2, 15)
         
-        txt = font.render(opt, True, WHITE if is_selected else (200, 200, 200))
+        txt_col = WHITE if is_selected else (200, 200, 200)
+        if i == 3 and reset_confirm: txt_col = (255, 200, 200)
+        
+        txt = font.render(display_text, True, txt_col)
         screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
 
     inst = font.render("UP/DOWN: Select | ENTER: Confirm", True, (100, 100, 150))

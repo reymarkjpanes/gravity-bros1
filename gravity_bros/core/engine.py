@@ -102,6 +102,37 @@ class GameEngine:
         self.transition = Transition()
         self.pending_state = None
         self.break_loop_flag = False
+        self.data_reset_confirm = False
+
+    def reset_game_data(self):
+        """Wipes all game progress and saves an empty state."""
+        self.unlocked_levels = [1]
+        self.selected_level = 1
+        self.total_score = 0
+        self.total_coins = 0
+        self.total_gems = 0
+        self.total_stars = 0
+        self.global_xp = 0
+        self.global_level = 1
+        self.unlocked_skins = ['Default']
+        self.selected_skin = 'Default'
+        self.unlocked_characters = ['Juan']
+        self.selected_character = 'Juan'
+        self.unlocked_powerups = ['None']
+        self.selected_powerup = 'None'
+        self.unlocked_pets = ['None']
+        self.selected_pet = 'None'
+        self.unlocked_upgrades = []
+        self.unlocked_evolutions = []
+        self.unlocked_skills = []
+        self.skill_points = 0
+        self.achievements_unlocked = []
+        self.high_scores = {}
+        self.achievements = AchievementManager()
+        self.achievements.load([])
+        
+        save_game({})
+        self.data_reset_confirm = False
 
     def trigger_transition(self, next_state, effect='fade'):
         self.pending_state = next_state
@@ -159,7 +190,7 @@ class GameEngine:
                 break
                 
             if self.app_state == 'MAIN_MENU':
-                draw_main_menu(self.screen, self.font, self.big_font, self.mm_selection)
+                draw_main_menu(self.screen, self.font, self.big_font, self.mm_selection, self.data_reset_confirm)
             elif self.app_state == 'LEVEL_SELECT':
                 draw_level_select(self.screen, self.font, self.unlocked_levels, self.selected_level, 
                                   self.difficulty, self.global_level, self.global_xp, self.total_coins)
@@ -214,18 +245,27 @@ class GameEngine:
                     pygame.quit(); sys.exit()
                 if event.type == pygame.KEYDOWN:
                     if self.app_state == 'MAIN_MENU':
-                        if event.key == pygame.K_UP: self.mm_selection = max(0, self.mm_selection - 1); sounds.play('jump')
-                        elif event.key == pygame.K_DOWN: self.mm_selection = min(5, self.mm_selection + 1); sounds.play('jump')
+                        if event.key == pygame.K_UP: 
+                            self.mm_selection = max(0, self.mm_selection - 1)
+                            self.data_reset_confirm = False # Reset confirmation if moving
+                            sounds.play('jump')
+                        elif event.key == pygame.K_DOWN: 
+                            self.mm_selection = min(5, self.mm_selection + 1)
+                            self.data_reset_confirm = False # Reset confirmation if moving
+                            sounds.play('jump')
                         elif event.key == pygame.K_RETURN:
                             if self.mm_selection == 0: self.app_state = 'LEVEL_SELECT'
                             elif self.mm_selection == 1:
                                 self.app_state = 'MODES'
                                 self.mode_selection = 0
                             elif self.mm_selection == 2: self.app_state = 'STORE'; self.store_tab = 0; self.store_selection = 0
-                            elif self.mm_selection == 3: # DATA
-                                self.init_game_data()
-                                save_game({})
-                                sounds.play('coin')
+                            elif self.mm_selection == 3: # RESET DATA
+                                if not self.data_reset_confirm:
+                                    self.data_reset_confirm = True
+                                    sounds.play('jump')
+                                else:
+                                    self.reset_game_data()
+                                    sounds.play('coin')
                             elif self.mm_selection == 4:
                                 self.app_state = 'SETTINGS'
                                 self.mode_selection = 0
@@ -408,6 +448,8 @@ class GameEngine:
         
         global_respawn_x = 50
         global_respawn_y = 300
+        portal_return_x = 50 # New: Track portal return point
+
 
         is_immortal = False
         is_flappy = False
@@ -743,7 +785,8 @@ class GameEngine:
                 for b in bosses: 
                     pre_health = b.health
                     was_dead = b.dead
-                    b.update(platforms, blocks, player, enemies, projectiles)
+                    b.update(platforms, blocks, player, enemies, projectiles, particles)
+
                     if b.health < pre_health:
                         b.hit_flash = 10  # Trigger white flash
                         if self.screen_shake_enabled:
@@ -752,6 +795,9 @@ class GameEngine:
                         dmg_numbers.spawn(b.rect.centerx, b.rect.top, pre_health - b.health, 'boss')
                     if b.dead and not was_dead:
                         self.achievements.unlock('boss_killer')
+                        if b.hit_by_melee and not b.hit_by_projectile:
+                            self.achievements.unlock('melee_only')
+
                         # ══ BOSS DEFEAT CINEMATIC ══
                         sounds.play('boss_defeat')
                         player.score += 5000
@@ -772,7 +818,8 @@ class GameEngine:
                 for b in blocks: 
                     if hasattr(b, 'update'): b.update()
                 for p in platforms:
-                    if hasattr(p, 'update'): p.update()
+                    if hasattr(p, 'update'): p.update(player)
+
                     
                 if active_pet and alive_players:
                     active_pet.update(player, enemies, coins)
@@ -800,11 +847,17 @@ class GameEngine:
                 for hp in hidden_portals:
                     if not player.dead and player.rect.colliderect(hp.rect):
                         if hp.rect.y < -1000:
+                            # Return from bonus room: Restore saved X position
+                            player.rect.x = portal_return_x
                             player.rect.y = 100
+                            player.vel_y = 0
                         else:
+                            # Enter bonus room: Save current X position
+                            portal_return_x = player.rect.x
                             player.rect.x = 50
                             player.rect.y = -1900
                             player.vel_y = 0
+
 
                 if not player.dead and all_bosses_defeated and player.rect.colliderect(portal.rect):
                     sounds.play('coin')
@@ -864,24 +917,24 @@ class GameEngine:
                 overlay.fill((255, 200, 100, 15)) # Very subtle warm sunlight
                 self.screen.blit(overlay, (0, 0))
 
-            for s in scenery: s.draw(self.screen, camera_x, time)
-            for hz in hazards: hz.draw(self.screen, camera_x, theme)
-            for cp in checkpoints: cp.draw(self.screen, time, camera_x)
-            for hp in hidden_portals: hp.draw(self.screen, time, camera_x)
-            for p in platforms: p.draw(self.screen, camera_x, theme)
-            for b in blocks: b.draw(self.screen, camera_x)
-            for c in coins: c.draw(self.screen, time, camera_x)
-            for g in gems: g.draw(self.screen, time, camera_x)
-            for s in stars_col: s.draw(self.screen, time, camera_x)
-            for p_up in power_ups: p_up.draw(self.screen, time, camera_x)
-            for e in enemies: e.draw(self.screen, time, camera_x)
-            for b in bosses: b.draw(self.screen, time, camera_x)
-            for p in projectiles: p.draw(self.screen, camera_x)
-            for p in particles: p.draw(self.screen, camera_x)
-            if active_pet: active_pet.draw(self.screen, camera_x)
-            if all_bosses_defeated: portal.draw(self.screen, time, camera_x)
+            for s in scenery: s.draw(self.screen, camera_x, time, cam_y_offset)
+            for hz in hazards: hz.draw(self.screen, camera_x, theme, cam_y_offset)
+            for cp in checkpoints: cp.draw(self.screen, time, camera_x, cam_y_offset)
+            for hp in hidden_portals: hp.draw(self.screen, time, camera_x, cam_y_offset)
+            for p in platforms: p.draw(self.screen, camera_x, theme, cam_y_offset)
+            for b in blocks: b.draw(self.screen, camera_x, cam_y_offset)
+            for c in coins: c.draw(self.screen, time, camera_x, cam_y_offset)
+            for g in gems: g.draw(self.screen, time, camera_x, cam_y_offset)
+            for s in stars_col: s.draw(self.screen, time, camera_x, cam_y_offset)
+            for p_up in power_ups: p_up.draw(self.screen, time, camera_x, cam_y_offset)
+            for e in enemies: e.draw(self.screen, time, camera_x, cam_y_offset)
+            for b in bosses: b.draw(self.screen, time, camera_x, cam_y_offset)
+            for p in projectiles: p.draw(self.screen, camera_x, cam_y_offset)
+            for p in particles: p.draw(self.screen, camera_x, cam_y_offset)
+            if active_pet: active_pet.draw(self.screen, camera_x, cam_y_offset)
+            if all_bosses_defeated: portal.draw(self.screen, time, camera_x, cam_y_offset)
             
-            if not player.dead: player.draw(self.screen, camera_x)
+            if not player.dead: player.draw(self.screen, camera_x, cam_y_offset)
             
             draw_minimap(self.screen, platforms, player, bosses, portal, self.selected_level)
             draw_hud(self.screen, self.font, self.big_font, player, theme, self.selected_level, weapon, bosses)
