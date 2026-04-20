@@ -249,7 +249,19 @@ class Player(pygame.sprite.Sprite):
                         sounds.play('die')
                         for _ in range(20): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=6))
                 elif not is_truly_invuln:
-                    self.take_hit(particles, effects)
+                    # ── Stomp Mechanic ──
+                    is_falling = (self.vel_y * self.gravity_dir) > 0
+                    is_above = (self.rect.bottom < e.rect.centery) if self.gravity_dir == 1 else (self.rect.top > e.rect.centery)
+                    if is_falling and is_above:
+                        e.take_damage(5)
+                        self.vel_y = -10 * self.gravity_dir # Bounce
+                        self.has_double_jumped = False
+                        self.score += 50
+                        particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 8))
+                        sounds.play('stomp')
+                    else:
+                        self.take_hit(particles, effects)
+
                 elif self.is_dashing:
                     e.take_damage(2)
                     self.score += 50
@@ -908,8 +920,10 @@ class Player(pygame.sprite.Sprite):
             # erupt from Juan's body in a full 360° radial burst.
             self.ability_timer = 350
             self.max_cooldown = 600
+            self.hp = min(self.hp + 1, self.max_hp) # heal 1 HP
             self.speed_boost_timer = 350
             self.invincibility_timer = 120
+
             self.double_jump_active = True
             for _ in range(45):
                 angle = _rnd.uniform(0, 6.28)
@@ -1106,7 +1120,9 @@ class Player(pygame.sprite.Sprite):
             # Shadow clones drain HP from all enemies, healing player
             self.awaken_max_cooldown = 1200
             self.awaken_timer = 300
+            self.hp = min(self.hp + 3, self.max_hp) # Life drain heal
             self.invincibility_timer = max(self.invincibility_timer, 300)
+
             # Drain all nearby enemies
             for e in enemies:
                 if abs(e.rect.centerx - self.rect.centerx) < 500:
@@ -1260,9 +1276,11 @@ class Player(pygame.sprite.Sprite):
             # Full heal + massive regen aura + speed
             self.awaken_max_cooldown = 1200
             self.awaken_timer = 360
+            self.hp = self.max_hp  # FULL HEAL
             self.invincibility_timer = max(self.invincibility_timer, 360)
             self.speed_boost_timer = max(self.speed_boost_timer, 360)
             self.double_jump_active = True
+
             # Massive green life burst
             for _ in range(70):
                 angle = _rnd.uniform(0, 6.28)

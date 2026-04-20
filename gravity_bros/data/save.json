@@ -11,13 +11,13 @@
     9,
     10
   ],
-  "current_level": 6,
-  "score": 194650,
-  "coins": 239809,
-  "gems": 30,
+  "current_level": 3,
+  "score": 230950,
+  "coins": 440089,
+  "gems": 36,
   "stars": 9,
-  "global_xp": 115,
-  "global_level": 22,
+  "global_xp": 14280,
+  "global_level": 26,
   "unlocked_skins": [
     "Default"
   ],
@@ -38,7 +38,7 @@
     "Maria",
     "Taho"
   ],
-  "selected_character": "Jeepney",
+  "selected_character": "Kapre",
   "unlocked_powerups": [
     "None",
     "mushroom"
@@ -60,7 +60,8 @@
     "Maria",
     "LapuLapu",
     "Taho",
-    "Jeepney"
+    "Jeepney",
+    "Kapre"
   ],
   "unlocked_skills": [
     "grav_flip_speed",
@@ -73,7 +74,7 @@
     "agil_jump",
     "agil_double_jump"
   ],
-  "skill_points": 11,
+  "skill_points": 20,
   "achievements_unlocked": [
     "first_blood",
     "boss_killer"
