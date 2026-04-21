@@ -3,15 +3,22 @@
     1,
     2,
     3,
-    4
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
   ],
-  "current_level": 2,
-  "score": 40450,
-  "coins": 598835,
-  "gems": 1,
-  "stars": 0,
-  "global_xp": 4310,
-  "global_level": 5,
+  "current_level": 10,
+  "score": 104350,
+  "coins": 599283,
+  "gems": 13,
+  "stars": 3,
+  "global_xp": 11095,
+  "global_level": 12,
   "unlocked_skins": [
     "Default"
   ],
@@ -34,7 +41,7 @@
     "LapuLapu"
   ],
   "unlocked_skills": [],
-  "skill_points": 17,
+  "skill_points": 47,
   "achievements_unlocked": [
     "first_blood",
     "boss_killer",

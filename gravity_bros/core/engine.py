@@ -444,7 +444,6 @@ class GameEngine:
         
         projectiles = []
         particles = []
-        stars_bg = [(random.randint(0, WIDTH), random.randint(HEIGHT//2, HEIGHT)) for _ in range(40)]
         
         global_respawn_x = 50
         global_respawn_y = 300
@@ -628,6 +627,7 @@ class GameEngine:
                     if event.key == pygame.K_g:
                         g_pressed = False
     
+            theme = get_theme(self.selected_level)
             keys = pygame.key.get_pressed()
             
             if is_paused:
@@ -705,7 +705,6 @@ class GameEngine:
                 level_complete_timer -= 1
                 if level_complete_timer <= 0:
                     level_complete = False
-                    prev_level = self.selected_level
                     self.selected_level += 1
                     is_first_clear = (self.selected_level not in self.unlocked_levels)
                     if self.selected_level not in self.unlocked_levels: self.unlocked_levels.append(self.selected_level)
@@ -884,8 +883,6 @@ class GameEngine:
             # Only apply vertical offset for significant height differences
             cam_y_offset = int(camera_y) if abs(camera_y) > 20 else 0
 
-            theme = get_theme(self.selected_level)
-            
             if screen_shake > 0 and self.screen_shake_enabled:
                 shake_x = random.randint(-screen_shake, screen_shake)
                 shake_y = random.randint(-screen_shake, screen_shake)
@@ -894,7 +891,7 @@ class GameEngine:
                 shake_x, shake_y = 0, 0
                 
             # ── Rich procedural background ──
-            from levels.backgrounds import draw_background
+            from levels.backgrounds_new import draw_background
             draw_background(self.screen, self.selected_level, camera_x, time)
 
             # Weather effects and Dynamic Background Tints overlay
