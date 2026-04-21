@@ -1,8 +1,12 @@
 import pygame
 import math
 import os
+import random as _rnd
 from .items import Block, Particle, Projectile, FloatText
 from core.sound_manager import sounds
+
+# Cached font for character tag — avoid recreating every frame
+_TAG_FONT = None
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, x=50, y=300):
@@ -18,17 +22,33 @@ class Player(pygame.sprite.Sprite):
         self.dead = False
         self.facing = 1
         
+        # ── HP System ──
+        self.max_hp = 5
+        self.hp = 5
+        self.death_count = 0  # track deaths for star rating
+        
         self.score = 0
         self.coins = 0
         self.gems = 0
         self.stars = 0
         self.level_score = 0
         self.level_coins = 0
+        self.level_coins_total = 0  # for star rating: total available in level
         
         self.invincibility_timer = 0
         self.speed_boost_timer = 0
         self.double_jump_active = False
         self.has_double_jumped = False
+        
+        # ── Coyote Time & Jump Buffering ──
+        self.coyote_timer = 0       # frames since leaving ground
+        self.jump_buffer_timer = 0  # frames since jump was pressed
+        self.was_on_ground = False   # previous frame ground state
+        
+        # ── Wall Slide / Wall Jump ──
+        self.on_wall = 0           # -1=left wall, 1=right wall, 0=none
+        self.wall_slide_timer = 0
+        self.wall_jump_lockout = 0  # prevents re-sticking immediately
         
         self.ability_cooldown = 0
         self.max_cooldown = 300
@@ -64,6 +84,13 @@ class Player(pygame.sprite.Sprite):
         self.selected_character = 'Juan'
         self.selected_skin = 'Default'
         self.is_immortal = False
+        
+        # ── Landing Squash-Stretch ──
+        self.squash_timer = 0       # >0 = squash on land, <0 = stretch on jump
+        
+        # ── Death Animation ──
+        self.death_freeze_timer = 0  # frames of freeze before death fall
+        self.death_particles_spawned = False
 
         # Load sprites
         self.images = {}
@@ -84,14 +111,22 @@ class Player(pygame.sprite.Sprite):
             self._requested_shake = 0
             
         if self.dead:
+            # Death freeze for dramatic pause
+            if self.death_freeze_timer > 0:
+                self.death_freeze_timer -= 1
+                return effects
             self.vel_y += self.gravity * self.gravity_dir
             self.rect.y += int(self.vel_y)
             return effects
 
         # Tick timers
-        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer', 'dash_cooldown', 'melee_timer', 'attack_cooldown', 'combo_timer', 'awaken_cooldown', 'awaken_timer'):
+        for attr in ('invincibility_timer', 'speed_boost_timer', 'ability_cooldown', 'ability_timer', 'dash_timer', 'dash_cooldown', 'melee_timer', 'attack_cooldown', 'combo_timer', 'awaken_cooldown', 'awaken_timer', 'wall_jump_lockout', 'jump_buffer_timer'):
             v = getattr(self, attr)
             if v > 0: setattr(self, attr, v - 1)
+
+        # Squash/stretch timer tick
+        if self.squash_timer > 0: self.squash_timer -= 1
+        elif self.squash_timer < 0: self.squash_timer += 1
 
         if self.combo_timer <= 0:
             self.combo_kills = 0
@@ -142,20 +177,55 @@ class Player(pygame.sprite.Sprite):
                 self.flight_stamina = min(100, self.flight_stamina + 0.5)
 
         # Horizontal
+        self.on_wall = 0  # Reset wall contact
         self.rect.x += int(self.vel_x)
         self._collide(self.vel_x, 0, platforms, blocks)
 
         # Vertical
         vel_y_before = self.vel_y
+        
+        # Wall slide: slow descent when touching a wall and pressing into it
+        if self.on_wall != 0 and not self.on_ground and self.vel_y > 0 and self.wall_jump_lockout <= 0:
+            self.vel_y = min(self.vel_y, 2.0)  # Cap fall speed to slow slide
+            self.wall_slide_timer += 1
+        else:
+            self.wall_slide_timer = 0
+        
         self.vel_y += self.gravity * self.gravity_dir
         self.vel_y = max(-25.0, min(25.0, self.vel_y))
         self.rect.y += int(self.vel_y)
+        self.was_on_ground = self.on_ground
         self.on_ground = False
         self._collide(0, self.vel_y, platforms, blocks)
+
+        # ── Coyote Time: track frames since leaving ground ──
+        if self.on_ground:
+            self.coyote_timer = 8  # 8 frames of grace
+        elif self.was_on_ground and not self.on_ground:
+            pass  # coyote_timer will tick down naturally
+        if not self.on_ground and self.coyote_timer > 0:
+            self.coyote_timer -= 1
+
+        # ── Jump Buffer: if buffered and now on ground, auto-jump ──
+        if self.on_ground and self.jump_buffer_timer > 0:
+            self.jump_buffer_timer = 0
+            self.vel_y = -self.jump_power * self.gravity_dir
+            self.squash_timer = -6  # stretch on jump
+            sounds.play('jump')
 
         if self.on_ground:
             self.has_double_jumped = False
             self.combo_kills = 0
+            # Landing dust & squash
+            if self.was_on_ground is False and abs(vel_y_before) > 3:
+                self.squash_timer = 6  # squash frames
+                # Landing dust particles
+                dust_count = min(8, int(abs(vel_y_before)))
+                for _ in range(dust_count):
+                    particles.append(Particle(
+                        self.rect.centerx + _rnd.randint(-10, 10),
+                        self.rect.bottom,
+                        (180, 160, 130), size=_rnd.randint(3, 6)))
             if ch == 'Taho' and abs(vel_y_before) >= 15:
                 effects['screen_shake'] = 10
                 sounds.play('stomp')
@@ -179,7 +249,19 @@ class Player(pygame.sprite.Sprite):
                         sounds.play('die')
                         for _ in range(20): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=6))
                 elif not is_truly_invuln:
-                    self.die()
+                    # ── Stomp Mechanic ──
+                    is_falling = (self.vel_y * self.gravity_dir) > 0
+                    is_above = (self.rect.bottom < e.rect.centery) if self.gravity_dir == 1 else (self.rect.top > e.rect.centery)
+                    if is_falling and is_above:
+                        e.take_damage(5)
+                        self.vel_y = -10 * self.gravity_dir # Bounce
+                        self.has_double_jumped = False
+                        self.score += 50
+                        particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 8))
+                        sounds.play('stomp')
+                    else:
+                        self.take_hit(particles, effects)
+
                 elif self.is_dashing:
                     e.take_damage(2)
                     self.score += 50
@@ -202,18 +284,21 @@ class Player(pygame.sprite.Sprite):
                     self.vel_x = -15 * self.facing
                     self.vel_y = -10
                     b.health -= 50
+                    b.hit_by_melee = True
                     effects['screen_shake'] = 20
                     for _ in range(30): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=10))
                 else:
-                    self.die()
+                    self.take_hit(particles, effects)
             elif self.rect.colliderect(b.rect) and self.is_dashing and b.invincible_timer <= 0:
                 b.health -= 25
+                b.hit_by_melee = True
                 b.invincible_timer = 20
                 effects['hit_stop'] = 12
                 effects['screen_shake'] = 10
                 particles.append(Particle(b.rect.centerx, b.rect.centery, (0, 255, 255), 15))
             elif self.melee_timer > 0 and self.melee_hitbox.colliderect(b.rect) and b.invincible_timer <= 0:
                 b.health -= 50
+                b.hit_by_melee = True
                 b.invincible_timer = 20
                 effects['hit_stop'] = 15
                 effects['screen_shake'] = 12
@@ -262,13 +347,13 @@ class Player(pygame.sprite.Sprite):
         # Fall out of world
         if self.gravity_dir == 1:
             if self.rect.top > screen_height - 30:
-                if not is_immortal: self.die()
+                if not is_immortal: self.die(particles)
                 else: 
                     self.rect.bottom = screen_height - 30
                     self.vel_y = -self.jump_power
         else:
             if self.rect.bottom < 30:
-                if not is_immortal: self.die()
+                if not is_immortal: self.die(particles)
                 else:
                     self.rect.top = 30
                     self.vel_y = float(self.jump_power)
@@ -298,6 +383,9 @@ class Player(pygame.sprite.Sprite):
     def _collide(self, vel_x, vel_y, platforms, blocks):
         ch = self.selected_character
         is_jeepney_dash = (ch == 'Jeepney' and self.dash_timer > 0)
+        keys = pygame.key.get_pressed()
+        pressing_left = keys[pygame.K_LEFT] or keys[pygame.K_a]
+        pressing_right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
         
         for p in platforms + blocks:
             if not self.rect.colliderect(p.rect):
@@ -307,8 +395,16 @@ class Player(pygame.sprite.Sprite):
                 if isinstance(p, Block) and is_jeepney_dash:
                     if not p.is_hit: p.hit()
                     continue
-                if vel_x > 0: self.rect.right = p.rect.left
-                if vel_x < 0: self.rect.left = p.rect.right
+                if vel_x > 0:
+                    self.rect.right = p.rect.left
+                    # Wall contact detection (right wall)
+                    if not self.on_ground and pressing_right and self.wall_jump_lockout <= 0:
+                        self.on_wall = 1
+                if vel_x < 0:
+                    self.rect.left = p.rect.right
+                    # Wall contact detection (left wall)
+                    if not self.on_ground and pressing_left and self.wall_jump_lockout <= 0:
+                        self.on_wall = -1
                 
             if vel_y != 0:
                 if vel_y > 0: # moving down
@@ -582,7 +678,7 @@ class Player(pygame.sprite.Sprite):
             # Direct boss devastation
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 250 and b.invincible_timer <= 0:
-                    b.health -= 25
+                    b.health -= 35
                     b.invincible_timer = 35
                     b.stun_timer = 20
                     self._requested_shake = 12
@@ -599,7 +695,7 @@ class Player(pygame.sprite.Sprite):
             for vx_off, vy_off in spreads:
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    self.facing * (13 + vx_off), vy_off, 'book'))
+                    self.facing * (13 + vx_off), vy_off, 'book', damage=2))
             # Enlightenment aura (indigo + cyan)
             for _ in range(25):
                 particles.append(Particle(
@@ -630,7 +726,7 @@ class Player(pygame.sprite.Sprite):
             # Boss bolo strike
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 120 and b.invincible_timer <= 0:
-                    b.health -= 25; b.invincible_timer = 25
+                    b.health -= 40; b.invincible_timer = 25
             self._requested_shake = 14
             sounds.play('jump')
 
@@ -666,7 +762,7 @@ class Player(pygame.sprite.Sprite):
             # Deal boss drain damage too
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 100 and b.invincible_timer <= 0:
-                    b.health -= 10; b.invincible_timer = 15
+                    b.health -= 20; b.invincible_timer = 15
                     b.stun_timer = max(b.stun_timer, 60)
             sounds.play('jump')
 
@@ -710,7 +806,7 @@ class Player(pygame.sprite.Sprite):
                 e.stun_timer = 300
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 15; b.invincible_timer = 20
+                    b.health -= 25; b.invincible_timer = 20
                     b.stun_timer = max(b.stun_timer, 180)
             self._requested_shake = 6
             sounds.play('jump')
@@ -776,7 +872,7 @@ class Player(pygame.sprite.Sprite):
             for e in enemies: e.stun_timer = 250
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 10; b.invincible_timer = 20
+                    b.health -= 20; b.invincible_timer = 20
                     b.stun_timer = max(b.stun_timer, 150)
             for _ in range(60):
                 angle = _rnd.uniform(0, 6.28)
@@ -811,7 +907,7 @@ class Player(pygame.sprite.Sprite):
                         e.stun_timer = 200
                 for b in bosses:
                     if abs(b.rect.centerx - self.rect.centerx) < 200 and b.invincible_timer <= 0:
-                        b.health -= 15; b.invincible_timer = 25
+                        b.health -= 25; b.invincible_timer = 25
                 self._requested_shake = 9
                 sounds.play('jump')
             else:
@@ -827,8 +923,10 @@ class Player(pygame.sprite.Sprite):
             # erupt from Juan's body in a full 360° radial burst.
             self.ability_timer = 350
             self.max_cooldown = 600
+            self.hp = min(self.hp + 1, self.max_hp) # heal 1 HP
             self.speed_boost_timer = 350
             self.invincibility_timer = 120
+
             self.double_jump_active = True
             for _ in range(45):
                 angle = _rnd.uniform(0, 6.28)
@@ -877,7 +975,7 @@ class Player(pygame.sprite.Sprite):
             # Ram boss hard
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 400 and b.invincible_timer <= 0:
-                    b.health -= 20; b.invincible_timer = 30
+                    b.health -= 35; b.invincible_timer = 30
             # Exhaust smoke + chrome gleam particles
             for i in range(40):
                 particles.append(Particle(
@@ -945,7 +1043,7 @@ class Player(pygame.sprite.Sprite):
                 angle = i * (6.28 / 12)
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    math.cos(angle) * 8, math.sin(angle) * 8, 'book', damage=3))
+                    math.cos(angle) * 8, math.sin(angle) * 8, 'book', damage=6))
             for _ in range(50):
                 particles.append(Particle(
                     self.rect.centerx + _rnd.randint(-60, 60),
@@ -974,7 +1072,7 @@ class Player(pygame.sprite.Sprite):
             # Direct boss hit
             for b in bosses:
                 if abs(b.rect.centerx - self.rect.centerx) < 300 and b.invincible_timer <= 0:
-                    b.health -= 30; b.invincible_timer = 40
+                    b.health -= 60; b.invincible_timer = 40
             self._requested_shake = 15
             sounds.play('jump')
 
@@ -989,7 +1087,7 @@ class Player(pygame.sprite.Sprite):
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
                     math.cos(angle) * _rnd.uniform(6, 12),
-                    math.sin(angle) * _rnd.uniform(6, 12), 'book', damage=2))
+                    math.sin(angle) * _rnd.uniform(6, 12), 'book', damage=5))
             # Enlightenment aura burst
             for _ in range(60):
                 particles.append(Particle(
@@ -1008,7 +1106,7 @@ class Player(pygame.sprite.Sprite):
             # Devastate bosses
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 40; b.invincible_timer = 60
+                    b.health -= 90; b.invincible_timer = 60
                     b.stun_timer = max(b.stun_timer, 120)
             # Massive revolutionary explosion
             for i in range(80):
@@ -1025,7 +1123,9 @@ class Player(pygame.sprite.Sprite):
             # Shadow clones drain HP from all enemies, healing player
             self.awaken_max_cooldown = 1200
             self.awaken_timer = 300
+            self.hp = min(self.hp + 3, self.max_hp) # Life drain heal
             self.invincibility_timer = max(self.invincibility_timer, 300)
+
             # Drain all nearby enemies
             for e in enemies:
                 if abs(e.rect.centerx - self.rect.centerx) < 500:
@@ -1033,7 +1133,7 @@ class Player(pygame.sprite.Sprite):
                     e.take_damage(5)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 20; b.invincible_timer = 30
+                    b.health -= 50; b.invincible_timer = 30
             # Dark swarm particles
             for _ in range(60):
                 particles.append(Particle(
@@ -1053,7 +1153,7 @@ class Player(pygame.sprite.Sprite):
                 e.stun_timer = max(e.stun_timer, 300)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 15; b.invincible_timer = 25
+                    b.health -= 40; b.invincible_timer = 25
                     b.stun_timer = max(b.stun_timer, 200)
             # Earth crack particles
             for i in range(50):
@@ -1074,7 +1174,7 @@ class Player(pygame.sprite.Sprite):
                 e.stun_timer = max(e.stun_timer, 400)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 20; b.invincible_timer = 30
+                    b.health -= 55; b.invincible_timer = 30
                     b.stun_timer = max(b.stun_timer, 240)
             # Thick dark smoke
             for _ in range(70):
@@ -1098,7 +1198,7 @@ class Player(pygame.sprite.Sprite):
                 angle = i * (6.28 / 16)
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    math.cos(angle) * 10, math.sin(angle) * 10, 'fireball', damage=3))
+                    math.cos(angle) * 10, math.sin(angle) * 10, 'fireball', damage=7))
             # Horror aura
             for _ in range(50):
                 particles.append(Particle(
@@ -1119,12 +1219,12 @@ class Player(pygame.sprite.Sprite):
                 speed = 9
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery,
-                    math.cos(angle) * speed, math.sin(angle) * speed, 'fireball', damage=2))
+                    math.cos(angle) * speed, math.sin(angle) * speed, 'fireball', damage=6))
             for e in enemies:
                 e.stun_timer = max(e.stun_timer, 200)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 25; b.invincible_timer = 35
+                    b.health -= 50; b.invincible_timer = 35
             # Gold tribal explosion
             for _ in range(45):
                 particles.append(Particle(
@@ -1144,7 +1244,7 @@ class Player(pygame.sprite.Sprite):
                 e.take_damage(10)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 25; b.invincible_timer = 30
+                    b.health -= 65; b.invincible_timer = 30
                     b.stun_timer = max(b.stun_timer, 250)
             # Epic blizzard
             for _ in range(80):
@@ -1164,7 +1264,7 @@ class Player(pygame.sprite.Sprite):
                 e.take_damage(99)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 35; b.invincible_timer = 50
+                    b.health -= 85; b.invincible_timer = 50
             # Brown sugar wave particles
             for i in range(60):
                 particles.append(Particle(
@@ -1179,9 +1279,11 @@ class Player(pygame.sprite.Sprite):
             # Full heal + massive regen aura + speed
             self.awaken_max_cooldown = 1200
             self.awaken_timer = 360
+            self.hp = self.max_hp  # FULL HEAL
             self.invincibility_timer = max(self.invincibility_timer, 360)
             self.speed_boost_timer = max(self.speed_boost_timer, 360)
             self.double_jump_active = True
+
             # Massive green life burst
             for _ in range(70):
                 angle = _rnd.uniform(0, 6.28)
@@ -1201,7 +1303,7 @@ class Player(pygame.sprite.Sprite):
                 vy_alt = _rnd.uniform(-4, 4)
                 projectiles.append(Projectile(
                     self.rect.centerx, self.rect.centery - 5,
-                    self.facing * (14 + i * 0.8), vy_alt, 'gun', damage=4))
+                    self.facing * (14 + i * 0.8), vy_alt, 'gun', damage=9))
             # Poison cloud
             for _ in range(35):
                 particles.append(Particle(
@@ -1224,8 +1326,10 @@ class Player(pygame.sprite.Sprite):
                 e.take_damage(999)
             for b in bosses:
                 if b.invincible_timer <= 0:
-                    b.health -= 40; b.invincible_timer = 60
+                    b.health -= 110; b.invincible_timer = 60
+                    b.hit_by_melee = True
                     b.stun_timer = max(b.stun_timer, 120)
+
             # Massive exhaust + chrome explosion
             for i in range(60):
                 particles.append(Particle(
@@ -1248,58 +1352,116 @@ class Player(pygame.sprite.Sprite):
         return True
 
 
+    def take_hit(self, particles=None, effects=None):
+        """Take 1 HP of damage. Die if HP reaches 0."""
+        if self.invincibility_timer > 0 or self.dead or self.is_immortal:
+            return
+        self.hp -= 1
+        self.invincibility_timer = 90  # 1.5 seconds of iframes
+        self.vel_y = -8 * self.gravity_dir  # Knockback up
+        sounds.play('hit')
+        if effects:
+            effects['screen_shake'] = max(effects.get('screen_shake', 0), 6)
+            effects['hit_stop'] = max(effects.get('hit_stop', 0), 8)
+        # Hurt particles
+        if particles is not None:
+            for _ in range(12):
+                particles.append(Particle(
+                    self.rect.centerx + _rnd.randint(-8, 8),
+                    self.rect.centery + _rnd.randint(-8, 8),
+                    (255, _rnd.randint(50, 100), _rnd.randint(50, 100)), size=5))
+        if self.hp <= 0:
+            self.die(particles)
+
     def jump(self, is_immortal=False, is_flappy=False):
         if is_flappy:
             self.vel_y = -self.jump_power * self.gravity_dir
+            self.squash_timer = -6  # stretch
             sounds.play('jump')
-        elif self.vel_y == 0 or is_immortal:
+            return
+        
+        # Wall jump: if on a wall, jump away from it
+        if self.on_wall != 0 and not self.on_ground and self.wall_jump_lockout <= 0:
             self.vel_y = -self.jump_power * self.gravity_dir
+            self.vel_x = -self.on_wall * 8  # Push away from wall
+            self.facing = -self.on_wall
+            self.on_wall = 0
+            self.wall_jump_lockout = 15  # frames before can re-stick
+            self.wall_slide_timer = 0
+            self.squash_timer = -6
             sounds.play('jump')
+            return
+        
+        # Coyote time: can jump within 8 frames of leaving ground
+        can_jump = self.on_ground or self.coyote_timer > 0 or is_immortal
+        
+        # Double jump
+        if not can_jump and self.double_jump_active and not self.has_double_jumped:
+            self.has_double_jumped = True
+            can_jump = True
+        
+        if can_jump:
+            self.vel_y = -self.jump_power * self.gravity_dir
+            self.coyote_timer = 0  # consume coyote time
+            self.squash_timer = -6  # stretch on jump
+            sounds.play('jump')
+        else:
+            # Buffer the jump for 8 frames
+            self.jump_buffer_timer = 8
             
     def dash(self):
         if self.dash_cooldown <= 0 and not self.is_dashing:
             self.is_dashing = True
             self.dash_timer = 15
             self.dash_cooldown = 120
-            sounds.play('jump')
+            sounds.play('whoosh')
 
     def melee_attack(self):
         if self.melee_timer <= 0:
             self.melee_timer = 15 
-            sounds.play('jump')
+            sounds.play('hit')
 
     def flip_gravity(self):
         """UNIQUE MECHANIC - Gravity Flip"""
         self.gravity_dir *= -1
         self.vel_y = 0.0
         self.on_ground = False
-        sounds.play('jump')
+        sounds.play('gravity_flip')
 
-    def die(self):
+    def die(self, particles=None):
         if not self.dead:
             self.dead = True
+            self.death_count += 1
+            self.death_freeze_timer = 30  # 0.5s dramatic freeze
             self.vel_y = -10 * self.gravity_dir
             sounds.play('die')
+            # Death particle burst
+            if particles is not None:
+                for _ in range(30):
+                    particles.append(Particle(
+                        self.rect.centerx + _rnd.randint(-12, 12),
+                        self.rect.centery + _rnd.randint(-12, 12),
+                        (_rnd.randint(200, 255), _rnd.randint(0, 60), _rnd.randint(0, 60)),
+                        size=_rnd.randint(4, 10)))
 
-    def draw(self, surface, camera_x):
+    def draw(self, surface, camera_x, camera_y=0):
         if self.melee_timer > 0:
             slash_color = (255, 215, 0) if getattr(self, 'is_evolved', False) else (200, 255, 255)
             w = self.melee_timer * 3
             pygame.draw.arc(surface, slash_color, 
-                (self.melee_hitbox.x - camera_x - w//2, self.melee_hitbox.y - w//2, self.melee_hitbox.width + w, self.melee_hitbox.height + w),
+                (self.melee_hitbox.x - camera_x - w//2, self.melee_hitbox.y - camera_y - w//2, self.melee_hitbox.width + w, self.melee_hitbox.height + w),
                 -1.5 if self.facing == 1 else 1.5, 
                 1.5 if self.facing == 1 else 4.5, 4)
-                
                 
         if self.is_mounted:
             # Draw Tricycle Mount
             t_color = (200, 50, 50)
-            pygame.draw.rect(surface, t_color, (self.rect.x - camera_x - 10, self.rect.y + 10, 45, 25), border_radius=5)
+            pygame.draw.rect(surface, t_color, (self.rect.x - camera_x - 10, self.rect.y - camera_y + 10, 45, 25), border_radius=5)
             # Wheels
-            pygame.draw.circle(surface, (30,30,30), (self.rect.x - camera_x, self.rect.bottom), 8)
-            pygame.draw.circle(surface, (30,30,30), (self.rect.right - camera_x + 5, self.rect.bottom), 8)
+            pygame.draw.circle(surface, (30,30,30), (self.rect.x - camera_x, self.rect.bottom - camera_y), 8)
+            pygame.draw.circle(surface, (30,30,30), (self.rect.right - camera_x + 5, self.rect.bottom - camera_y), 8)
             # Draw player miniature head
-            pygame.draw.circle(surface, (255, 200, 150), (self.rect.centerx - camera_x, self.rect.top + 5), 8)
+            pygame.draw.circle(surface, (255, 200, 150), (self.rect.centerx - camera_x, self.rect.top - camera_y + 5), 8)
         else:
             char_key = self.selected_character.lower()
             
@@ -1337,7 +1499,7 @@ class Player(pygame.sprite.Sprite):
                 if ai['alpha'] > 0:
                     g = ai['img'].copy()
                     g.set_alpha(ai['alpha'])
-                    surface.blit(g, (ai['x'] - camera_x, ai['y']))
+                    surface.blit(g, (ai['x'] - camera_x, ai['y'] - camera_y))
                     ai['alpha'] -= ai['decay']
             # Clean up dead ghosts
             self._afterimages = [a for a in self._afterimages if a['alpha'] > 0]
@@ -1348,7 +1510,7 @@ class Player(pygame.sprite.Sprite):
                 if tf != self.facing: t_img = pygame.transform.flip(t_img, True, False)
                 if tg == -1 or self.dead: t_img = pygame.transform.flip(t_img, False, True)
                 t_img.set_alpha(alpha)
-                surface.blit(t_img, (tx - camera_x, ty))
+                surface.blit(t_img, (tx - camera_x, ty - camera_y))
 
             if self.dead or self.gravity_dir == -1:
                 img = pygame.transform.flip(img, False, True)
@@ -1360,24 +1522,47 @@ class Player(pygame.sprite.Sprite):
                 else:
                     img.set_alpha(255)
 
+            # ── Squash-Stretch Transform ──
+            if self.squash_timer != 0:
+                sq = self.squash_timer
+                if sq > 0:
+                    # Squash: wider, shorter
+                    sx = 1.0 + sq * 0.04
+                    sy = 1.0 - sq * 0.03
+                else:
+                    # Stretch: taller, thinner
+                    sx = 1.0 + sq * 0.03  # sq is negative so this shrinks
+                    sy = 1.0 - sq * 0.04  # sq is negative so this grows
+                nw = max(1, int(img.get_width() * sx))
+                nh = max(1, int(img.get_height() * sy))
+                img = pygame.transform.scale(img, (nw, nh))
+
             # ── Procedural Walk Cycle Wobble ──
             if self.on_ground and abs(self.vel_x) > 0.5:
-                import math as _m
-                wobble_angle = _m.sin(pygame.time.get_ticks() * 0.015) * 8 # ±8 degrees
+                wobble_angle = math.sin(pygame.time.get_ticks() * 0.015) * 8 # ±8 degrees
                 img = pygame.transform.rotate(img, wobble_angle)
                 # Re-center after rotation offset
-                b_rect = img.get_rect(center=(self.rect.x - camera_x + self.rect.width//2, self.rect.y + self.rect.height//2))
+                b_rect = img.get_rect(center=(self.rect.x - camera_x + self.rect.width//2, self.rect.y - camera_y + self.rect.height//2))
                 surface.blit(img, b_rect.topleft)
             else:
-                surface.blit(img, (self.rect.x - camera_x, self.rect.y))
+                surface.blit(img, (self.rect.x - camera_x, self.rect.y - camera_y))
         else:
             # Fallback block
             draw_rect = self.rect.copy()
             draw_rect.x -= camera_x
+            draw_rect.y -= camera_y
             pygame.draw.rect(surface, (255, 0, 0), draw_rect)
+        
+        # ── Wall Slide Visual ──
+        if self.on_wall != 0 and self.wall_slide_timer > 0:
+            for i in range(3):
+                wx = self.rect.left - camera_x if self.on_wall == -1 else self.rect.right - camera_x
+                wy = self.rect.top - camera_y + i * 10 + _rnd.randint(-2, 2)
+                pygame.draw.circle(surface, (200, 200, 200), (int(wx), int(wy)), _rnd.randint(2, 4))
             
-        # Draw Character Label Tag above head
-        font = pygame.font.SysFont("monospace", 14, bold=True)
-        tag = font.render(self.selected_character.upper(), True, (255, 255, 0))
-        surface.blit(tag, (self.rect.centerx - camera_x - tag.get_width()//2, self.rect.top - 20))
-
+        # Draw Character Label Tag above head (cached font)
+        global _TAG_FONT
+        if _TAG_FONT is None:
+            _TAG_FONT = pygame.font.SysFont("monospace", 14, bold=True)
+        tag = _TAG_FONT.render(self.selected_character.upper(), True, (255, 255, 0))
+        surface.blit(tag, (self.rect.centerx - camera_x - tag.get_width()//2, self.rect.top - camera_y - 20))

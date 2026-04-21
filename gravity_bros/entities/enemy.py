@@ -79,7 +79,7 @@ class Enemy:
                 if closest and md < 600:
                     from entities.items import Projectile
                     d_x = 1 if closest.rect.x > self.rect.x else -1
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, d_x * 5, 0, 'book', owner='enemy'))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.top, d_x * 8, -2, 'book', owner='enemy'))
 
         if self.type == 'flyer':
             self.rect.x += self.vx
@@ -125,7 +125,7 @@ class Enemy:
         if self.rect.top > 1400:
             self.dead = True
 
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         if self.dead: return
 
         # Tick hit flash
@@ -135,6 +135,7 @@ class Enemy:
         dir_key = 'right' if self.vx > 0 else 'left'
         img_key = f"{self.type}_{dir_key}"
         draw_x = self.rect.x - camera_x
+        draw_y = self.rect.y - camera_y
 
         img = self.images.get(img_key)
         if img:
@@ -142,25 +143,25 @@ class Enemy:
                 # White overlay on damaged enemy
                 flash = img.copy()
                 flash.fill((255, 255, 255, 200), special_flags=pygame.BLEND_RGBA_MULT)
-                surface.blit(img, (draw_x, self.rect.y))
-                surface.blit(flash, (draw_x, self.rect.y))
+                surface.blit(img, (draw_x, draw_y))
+                surface.blit(flash, (draw_x, draw_y))
             else:
-                surface.blit(img, (draw_x, self.rect.y))
+                surface.blit(img, (draw_x, draw_y))
         else:
             c = (255, 255, 255) if self.hit_flash > 0 else (139, 69, 19)
             if not self.hit_flash:
                 if self.type == 'shielded': c = (100, 100, 150)
                 elif self.type == 'archer': c = (100, 150, 100)
-            pygame.draw.rect(surface, c, (draw_x, self.rect.y, 24, 24))
+            pygame.draw.rect(surface, c, (draw_x, draw_y, 24, 24))
 
         if self.type == 'shielded' and getattr(self, 'shield_hp', 0) > 0:
-            pygame.draw.rect(surface, (200, 200, 200), (draw_x - 4, self.rect.y, 8, 24))
+            pygame.draw.rect(surface, (200, 200, 200), (draw_x - 4, draw_y, 8, 24))
 
         # HP bar (only if damaged and has more than 1 max HP)
         if self.max_hp > 1 and self.hp < self.max_hp and not self.dead:
             bar_w = 24
             filled = int(bar_w * (self.hp / self.max_hp))
-            bar_y = self.rect.y - 6
+            bar_y = draw_y - 6
             pygame.draw.rect(surface, (180, 0, 0),   (draw_x, bar_y, bar_w, 4))
             pygame.draw.rect(surface, (0, 220, 0),   (draw_x, bar_y, filled, 4))
             pygame.draw.rect(surface, (255,255,255), (draw_x, bar_y, bar_w, 4), 1)

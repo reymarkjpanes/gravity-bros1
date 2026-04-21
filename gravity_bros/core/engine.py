@@ -32,6 +32,8 @@ class GameEngine:
         self.big_font = pygame.font.SysFont("monospace", 40, bold=True)
         
         self.app_state = 'MAIN_MENU'
+        self.screen_shake_enabled = True
+        self.high_scores = {}  # {level: score}
         self.init_game_data()
 
     def init_game_data(self):
@@ -58,6 +60,7 @@ class GameEngine:
         self.unlocked_evolutions = []
         self.unlocked_skills = []
         self.skill_points = 0
+        self.mode_selection = 0  # Properly initialised
 
         saved_data = load_game()
         if saved_data:
@@ -82,6 +85,8 @@ class GameEngine:
             self.unlocked_skills = saved_data.get('unlocked_skills', [])
             self.skill_points = saved_data.get('skill_points', 0)
             self.achievements_unlocked = saved_data.get('achievements_unlocked', [])
+            self.high_scores = saved_data.get('high_scores', {})
+            self.screen_shake_enabled = saved_data.get('screen_shake_enabled', True)
             
         if not hasattr(self, 'achievements_unlocked'):
             self.achievements_unlocked = []
@@ -97,6 +102,37 @@ class GameEngine:
         self.transition = Transition()
         self.pending_state = None
         self.break_loop_flag = False
+        self.data_reset_confirm = False
+
+    def reset_game_data(self):
+        """Wipes all game progress and saves an empty state."""
+        self.unlocked_levels = [1]
+        self.selected_level = 1
+        self.total_score = 0
+        self.total_coins = 0
+        self.total_gems = 0
+        self.total_stars = 0
+        self.global_xp = 0
+        self.global_level = 1
+        self.unlocked_skins = ['Default']
+        self.selected_skin = 'Default'
+        self.unlocked_characters = ['Juan']
+        self.selected_character = 'Juan'
+        self.unlocked_powerups = ['None']
+        self.selected_powerup = 'None'
+        self.unlocked_pets = ['None']
+        self.selected_pet = 'None'
+        self.unlocked_upgrades = []
+        self.unlocked_evolutions = []
+        self.unlocked_skills = []
+        self.skill_points = 0
+        self.achievements_unlocked = []
+        self.high_scores = {}
+        self.achievements = AchievementManager()
+        self.achievements.load([])
+        
+        save_game({})
+        self.data_reset_confirm = False
 
     def trigger_transition(self, next_state, effect='fade'):
         self.pending_state = next_state
@@ -128,7 +164,9 @@ class GameEngine:
             'unlocked_evolutions': self.unlocked_evolutions,
             'unlocked_skills': self.unlocked_skills,
             'skill_points': self.skill_points,
-            'achievements_unlocked': self.achievements.unlocked
+            'achievements_unlocked': self.achievements.unlocked,
+            'high_scores': self.high_scores,
+            'screen_shake_enabled': self.screen_shake_enabled
         })
 
     def run(self):
@@ -152,7 +190,7 @@ class GameEngine:
                 break
                 
             if self.app_state == 'MAIN_MENU':
-                draw_main_menu(self.screen, self.font, self.big_font, self.mm_selection)
+                draw_main_menu(self.screen, self.font, self.big_font, self.mm_selection, self.data_reset_confirm)
             elif self.app_state == 'LEVEL_SELECT':
                 draw_level_select(self.screen, self.font, self.unlocked_levels, self.selected_level, 
                                   self.difficulty, self.global_level, self.global_xp, self.total_coins)
@@ -179,11 +217,13 @@ class GameEngine:
                 self.screen.fill((10, 15, 25))
                 t1 = self.big_font.render("SETTINGS", True, GOLD)
                 self.screen.blit(t1, (WIDTH//2 - t1.get_width()//2, 120))
-                ops = ["VOLUME UP", "VOLUME DOWN", "BACK"]
+                vol_pct = int(sounds.volume * 100)
+                shake_str = 'ON' if self.screen_shake_enabled else 'OFF'
+                ops = [f"VOLUME: {vol_pct}%  (UP)", f"VOLUME: {vol_pct}%  (DOWN)", f"SCREEN SHAKE: {shake_str}", "BACK"]
                 for i, op in enumerate(ops):
                     c = GOLD if self.mode_selection == i else WHITE
                     txt = self.font.render(op, True, c)
-                    self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, 250 + i * 60))
+                    self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, 250 + i * 50))
             elif self.app_state == 'SKILL_TREE':
                 if not hasattr(self, 'st_selection'): self.st_selection = 0
                 draw_skill_tree(self.screen, self.font, self.big_font, self.unlocked_skills, self.skill_points, self.st_selection)
@@ -204,25 +244,35 @@ class GameEngine:
                 if event.type == pygame.QUIT:
                     pygame.quit(); sys.exit()
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_m: 
-                        self.total_coins += 1000000 
-                    
                     if self.app_state == 'MAIN_MENU':
-                        if event.key == pygame.K_UP: self.mm_selection = max(0, self.mm_selection - 1); sounds.play('jump')
-                        elif event.key == pygame.K_DOWN: self.mm_selection = min(5, self.mm_selection + 1); sounds.play('jump')
+                        if event.key == pygame.K_UP: 
+                            self.mm_selection = max(0, self.mm_selection - 1)
+                            self.data_reset_confirm = False # Reset confirmation if moving
+                            sounds.play('jump')
+                        elif event.key == pygame.K_DOWN: 
+                            self.mm_selection = min(5, self.mm_selection + 1)
+                            self.data_reset_confirm = False # Reset confirmation if moving
+                            sounds.play('jump')
                         elif event.key == pygame.K_RETURN:
                             if self.mm_selection == 0: self.app_state = 'LEVEL_SELECT'
-                            elif self.mm_selection == 1: self.app_state = 'MODES'; getattr(self, 'mode_selection', setattr(self, 'mode_selection', 0))
+                            elif self.mm_selection == 1:
+                                self.app_state = 'MODES'
+                                self.mode_selection = 0
                             elif self.mm_selection == 2: self.app_state = 'STORE'; self.store_tab = 0; self.store_selection = 0
-                            elif self.mm_selection == 3: # DATA
-                                self.init_game_data()
-                                save_game({})
-                                sounds.play('coin')
-                            elif self.mm_selection == 4: self.app_state = 'SETTINGS'; getattr(self, 'mode_selection', setattr(self, 'mode_selection', 0))
+                            elif self.mm_selection == 3: # RESET DATA
+                                if not self.data_reset_confirm:
+                                    self.data_reset_confirm = True
+                                    sounds.play('jump')
+                                else:
+                                    self.reset_game_data()
+                                    sounds.play('coin')
+                            elif self.mm_selection == 4:
+                                self.app_state = 'SETTINGS'
+                                self.mode_selection = 0
                             elif self.mm_selection == 5: pygame.quit(); sys.exit()
                             
                     elif self.app_state in ['MODES', 'SETTINGS']:
-                        ops_count = 3 if self.app_state == 'MODES' else 2
+                        ops_count = 3 if self.app_state == 'MODES' else 3
                         if event.key == pygame.K_UP: self.mode_selection = max(0, self.mode_selection - 1); sounds.play('jump')
                         elif event.key == pygame.K_DOWN: self.mode_selection = min(ops_count, self.mode_selection + 1); sounds.play('jump')
                         elif event.key == pygame.K_RETURN:
@@ -236,6 +286,14 @@ class GameEngine:
                                     self._save_current_state(); self.trigger_transition('GAME_BOSS_RUSH', 'iris')
                             elif self.app_state == 'SETTINGS':
                                 if self.mode_selection == ops_count: self.trigger_transition('MAIN_MENU', 'fade')
+                                elif self.mode_selection == 0:
+                                    sounds.set_volume(min(1.0, sounds.volume + 0.1))
+                                elif self.mode_selection == 1:
+                                    sounds.set_volume(max(0.0, sounds.volume - 0.1))
+                                elif self.mode_selection == 2:
+                                    self.screen_shake_enabled = not self.screen_shake_enabled
+                                    sounds.play('coin')
+                                    self._save_current_state()
                     
                     elif self.app_state == 'LEVEL_SELECT':
                         if event.key == pygame.K_s: self.app_state = 'STORE'
@@ -386,14 +444,16 @@ class GameEngine:
         
         projectiles = []
         particles = []
-        stars_bg = [(random.randint(0, WIDTH), random.randint(HEIGHT//2, HEIGHT)) for _ in range(40)]
         
         global_respawn_x = 50
         global_respawn_y = 300
+        portal_return_x = 50 # New: Track portal return point
+
 
         is_immortal = False
         is_flappy = False
         cheat_menu = CheatMenu()
+        cheat_active = False  # Cheat menu toggle state
         weapon = 'fireball'
         is_paused = False
         f_pressed = False
@@ -411,6 +471,13 @@ class GameEngine:
         skill_flash_name = ''
         skill_flash_color = (255, 215, 0)
 
+        # ── Camera Y tracking ──
+        camera_y = 0.0
+        
+        # ── Boss defeat cinematic ──
+        boss_defeat_timer = 0
+        boss_defeat_slowmo = False
+        
         # ── Phase 1 systems ──
         from ui.skill_cutin import SkillCutIn
         from ui.damage_numbers import DamageNumberManager
@@ -419,6 +486,12 @@ class GameEngine:
         dmg_numbers = DamageNumberManager()
         boss_intro = BossIntro()
         boss_intro_triggered = False
+        
+        # ── Controller Support ──
+        joystick = None
+        if pygame.joystick.get_count() > 0:
+            joystick = pygame.joystick.Joystick(0)
+            joystick.init()
         
         running = True
         while running:
@@ -430,6 +503,47 @@ class GameEngine:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit(); sys.exit()
+                
+                # Controller button events
+                if event.type == pygame.JOYBUTTONDOWN:
+                    if dialogue.active:
+                        if event.button == 0: dialogue.advance()  # A = advance
+                        continue
+                    if is_paused:
+                        if event.button == 6: is_paused = False  # Start = resume
+                        continue
+                    if event.button == 0 and not player.dead:  # A = Jump
+                        player.jump(is_immortal, is_flappy)
+                    elif event.button == 2 and not player.dead:  # X = Basic Attack
+                        if not f_pressed:
+                            result = player.basic_attack(projectiles, particles, enemies)
+                            f_pressed = True
+                    elif event.button == 3 and not player.dead:  # Y = Skill
+                        if player.ability_cooldown <= 0:
+                            success = player.trigger_skill(particles, projectiles, enemies, bosses)
+                            if success:
+                                skill_flash_name, skill_flash_color = get_skill_flash_info(player.selected_character)
+                                skill_flash_timer = 150
+                                skill_cutin.start(player.selected_character)
+                                sounds.play('skill_activate')
+                    elif event.button == 1 and not player.dead:  # B = Dash
+                        player.dash()
+                    elif event.button == 4 and not player.dead:  # LB = Melee
+                        player.melee_attack()
+                    elif event.button == 5 and not player.dead:  # RB = Gravity Flip
+                        player.flip_gravity()
+                    elif event.button == 6:  # Start = Pause
+                        is_paused = True
+                    elif event.button == 0 and player.dead:  # A = Restart
+                        player.dead = False
+                        player.hp = player.max_hp
+                        player.rect.x = global_respawn_x
+                        player.rect.y = global_respawn_y
+                        player.vel_y = 0
+                        player.invincibility_timer = 120
+                elif event.type == pygame.JOYBUTTONUP:
+                    if event.button == 2: f_pressed = False
+                
                 if event.type == pygame.KEYDOWN:
                     if dialogue.active:
                         if event.key == pygame.K_RETURN: dialogue.advance()
@@ -451,11 +565,13 @@ class GameEngine:
                         player.jump(is_immortal, is_flappy)
                     if event.key == pygame.K_r and player.dead:
                         player.dead = False
+                        player.hp = player.max_hp  # Restore HP on respawn
                         player.rect.x = global_respawn_x
                         player.rect.y = global_respawn_y
                         player.vel_y = 0
                         player.invincibility_timer = 120
-                        screen_shake = 10
+                        if self.screen_shake_enabled:
+                            screen_shake = 10
                     elif event.key == pygame.K_r and not player.dead:
                         # Awaken Ultimate (R) — separate from restart
                         if player.awaken_cooldown <= 0 and getattr(player, 'is_evolved', False):
@@ -465,6 +581,7 @@ class GameEngine:
                                 skill_flash_name = 'AWAKEN ULTIMATE'
                                 skill_flash_color = (255, 215, 0)
                                 skill_cutin.start_awaken(player.selected_character)
+                                sounds.play('awaken')
                         elif getattr(player, 'is_evolved', False) and player.awaken_cooldown > 0:
                             # "NOT READY" flash
                             skill_flash_timer = 40
@@ -473,8 +590,9 @@ class GameEngine:
                     
                     
                     if event.key == pygame.K_c:
-                        cheat_menu.active = not cheat_menu.active
-                    if cheat_menu.active:
+                        cheat_active = not cheat_active
+                        cheat_menu.active = cheat_active
+                    if cheat_active:
                         if event.key == pygame.K_i: is_immortal = not is_immortal
                         if event.key == pygame.K_m: 
                             self.total_coins += 100000; player.coins += 100000
@@ -498,6 +616,7 @@ class GameEngine:
                                 skill_flash_timer = 150
                                 # Tekken-style cut-in
                                 skill_cutin.start(player.selected_character)
+                                sounds.play('skill_activate')
                         else:
                             # "NOT READY" flash for skill
                             skill_flash_timer = 40
@@ -508,11 +627,13 @@ class GameEngine:
                     if event.key == pygame.K_g:
                         g_pressed = False
     
+            theme = get_theme(self.selected_level)
             keys = pygame.key.get_pressed()
             
             if is_paused:
                 draw_pause_menu(self.screen, self.font, self.big_font)
-                cheat_menu.draw(self.screen, self.font, is_immortal, player.coins, is_flappy)
+                if cheat_active:
+                    cheat_menu.draw(self.screen, self.font, is_immortal, player.coins, is_flappy)
                 pygame.display.flip()
                 self.clock.tick(FPS)
                 continue
@@ -528,7 +649,7 @@ class GameEngine:
             if game_mode == 'TIME_ATTACK' and not level_complete and not player.dead:
                 game_timer -= 1
                 if game_timer <= 0:
-                    player.die()
+                    player.die(particles)
                     
             if game_mode == 'ENDLESS':
                 if player.rect.x > last_gen_x - 1200:
@@ -545,14 +666,30 @@ class GameEngine:
                         enemies.append(Enemy(last_gen_x + gap + w//2, HEIGHT - y - 80, 'hopper' if random.random() < 0.5 else 'walker'))
                     last_gen_x += gap + w
                 
+            # Joystick analog stick movement (supplement keyboard)
+            if joystick:
+                axis_x = joystick.get_axis(0)  # Left stick horizontal
+                if abs(axis_x) > 0.2:  # Dead zone
+                    # Player handles movement via key state, so we simulate by injecting
+                    # This works through player.vel_x which is set from keys in player.update
+                    pass  # Movement handled in player.py via key states
+                    # For held attack (X button)
+                if joystick.get_button(2) and not player.dead:
+                    if not f_pressed:
+                        f_pressed = True
+                        result = player.basic_attack(projectiles, particles, enemies)
+                        if result:
+                            sounds.play('hit')
+            
             if keys[pygame.K_f] and not player.dead:
                 if not f_pressed:
                     f_pressed = True
                     result = player.basic_attack(projectiles, particles, enemies)
                     if result:
-                        sounds.play('jump')
+                        sounds.play('hit')
             else:
-                f_pressed = False
+                if not (joystick and joystick.get_button(2)):
+                    f_pressed = False
 
             # Always compute boss state every frame
             all_bosses_defeated = (len(bosses) == 0) or all(b.dead for b in bosses)
@@ -568,7 +705,6 @@ class GameEngine:
                 level_complete_timer -= 1
                 if level_complete_timer <= 0:
                     level_complete = False
-                    prev_level = self.selected_level
                     self.selected_level += 1
                     is_first_clear = (self.selected_level not in self.unlocked_levels)
                     if self.selected_level not in self.unlocked_levels: self.unlocked_levels.append(self.selected_level)
@@ -609,12 +745,12 @@ class GameEngine:
                     effects = player.update(platforms, enemies, bosses, blocks, coins, gems, stars_col, power_ups, is_immortal, particles, projectiles, HEIGHT)
                     
                     # Check Hazards
-                    if not is_immortal and not player.dead and not player.invincibility_timer > 0:
+                    if not is_immortal and not player.dead:
                         for hz in hazards:
                             if player.rect.colliderect(hz.rect):
-                                player.die()
+                                player.take_hit(particles, effects)
                                 
-                    if effects and effects.get('screen_shake', 0) > 0:
+                    if effects and effects.get('screen_shake', 0) > 0 and self.screen_shake_enabled:
                         screen_shake = max(screen_shake, effects['screen_shake'])
                     if effects and effects.get('hit_stop', 0) > 0:
                         hit_stop = max(hit_stop, effects['hit_stop'])
@@ -648,28 +784,41 @@ class GameEngine:
                 for b in bosses: 
                     pre_health = b.health
                     was_dead = b.dead
-                    b.update(platforms, blocks, player, enemies, projectiles)
+                    b.update(platforms, blocks, player, enemies, projectiles, particles)
+
                     if b.health < pre_health:
-                        screen_shake = max(screen_shake, 5)
+                        b.hit_flash = 10  # Trigger white flash
+                        if self.screen_shake_enabled:
+                            screen_shake = max(screen_shake, 5)
                         hit_stop = max(hit_stop, 3)
                         dmg_numbers.spawn(b.rect.centerx, b.rect.top, pre_health - b.health, 'boss')
                     if b.dead and not was_dead:
                         self.achievements.unlock('boss_killer')
-                        # Boss just died! Big explosion party!
+                        if b.hit_by_melee and not b.hit_by_projectile:
+                            self.achievements.unlock('melee_only')
+
+                        # ══ BOSS DEFEAT CINEMATIC ══
+                        sounds.play('boss_defeat')
                         player.score += 5000
                         player.coins += 50
                         self.skill_points += 1  # +1 SP for boss kill!
-                        screen_shake = 25
-                        hit_stop = 20
+                        if self.screen_shake_enabled:
+                            screen_shake = 25
+                        hit_stop = 40  # Extended freeze for dramatic effect
+                        boss_defeat_timer = 120  # 2 seconds of slowmo
+                        boss_defeat_slowmo = True
                         dmg_numbers.spawn(b.rect.centerx, b.rect.top - 20, 5000, 'normal')
                         dmg_numbers.spawn(b.rect.centerx, b.rect.top - 40, '+1 SP', 'heal')
-                        for _ in range(60):
-                            particles.append(Particle(b.rect.centerx, b.rect.centery, (255, random.randint(50,200), 0)))
-                            particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 255, 255), 8))
+                        dmg_numbers.spawn(b.rect.centerx, b.rect.top - 60, 'DEFEATED!', 'boss')
+                        # Massive explosion
+                        for _ in range(80):
+                            particles.append(Particle(b.rect.centerx + random.randint(-40, 40), b.rect.centery + random.randint(-40, 40), (255, random.randint(50,200), 0), size=random.randint(4, 12)))
+                            particles.append(Particle(b.rect.centerx + random.randint(-30, 30), b.rect.centery + random.randint(-30, 30), (255, 255, 255), size=random.randint(6, 14)))
                 for b in blocks: 
                     if hasattr(b, 'update'): b.update()
                 for p in platforms:
-                    if hasattr(p, 'update'): p.update()
+                    if hasattr(p, 'update'): p.update(player)
+
                     
                 if active_pet and alive_players:
                     active_pet.update(player, enemies, coins)
@@ -697,11 +846,17 @@ class GameEngine:
                 for hp in hidden_portals:
                     if not player.dead and player.rect.colliderect(hp.rect):
                         if hp.rect.y < -1000:
+                            # Return from bonus room: Restore saved X position
+                            player.rect.x = portal_return_x
                             player.rect.y = 100
+                            player.vel_y = 0
                         else:
+                            # Enter bonus room: Save current X position
+                            portal_return_x = player.rect.x
                             player.rect.x = 50
                             player.rect.y = -1900
                             player.vel_y = 0
+
 
                 if not player.dead and all_bosses_defeated and player.rect.colliderect(portal.rect):
                     sounds.play('coin')
@@ -709,15 +864,26 @@ class GameEngine:
                     level_complete = True
                     level_complete_timer = 120
 
+            # Boss defeat slowmo tick
+            if boss_defeat_timer > 0:
+                boss_defeat_timer -= 1
+                if boss_defeat_timer <= 0:
+                    boss_defeat_slowmo = False
+
             # Render
             # Camera with boss intro override
             camera_x = max(0, player.rect.x - WIDTH // 2)
             if boss_intro.active:
                 camera_x = boss_intro.get_camera_override(camera_x)
 
-            theme = get_theme(self.selected_level)
-            
-            if screen_shake > 0:
+            # ── Camera Y tracking (smooth lerp) ──
+            target_camera_y = player.rect.centery - HEIGHT // 2
+            target_camera_y = max(-500, min(200, target_camera_y))  # Clamp range
+            camera_y += (target_camera_y - camera_y) * 0.08
+            # Only apply vertical offset for significant height differences
+            cam_y_offset = int(camera_y) if abs(camera_y) > 20 else 0
+
+            if screen_shake > 0 and self.screen_shake_enabled:
                 shake_x = random.randint(-screen_shake, screen_shake)
                 shake_y = random.randint(-screen_shake, screen_shake)
                 screen_shake -= 1
@@ -725,7 +891,7 @@ class GameEngine:
                 shake_x, shake_y = 0, 0
                 
             # ── Rich procedural background ──
-            from levels.backgrounds import draw_background
+            from levels.backgrounds_new import draw_background
             draw_background(self.screen, self.selected_level, camera_x, time)
 
             # Weather effects and Dynamic Background Tints overlay
@@ -748,24 +914,24 @@ class GameEngine:
                 overlay.fill((255, 200, 100, 15)) # Very subtle warm sunlight
                 self.screen.blit(overlay, (0, 0))
 
-            for s in scenery: s.draw(self.screen, camera_x, time)
-            for hz in hazards: hz.draw(self.screen, camera_x, theme)
-            for cp in checkpoints: cp.draw(self.screen, time, camera_x)
-            for hp in hidden_portals: hp.draw(self.screen, time, camera_x)
-            for p in platforms: p.draw(self.screen, camera_x, theme)
-            for b in blocks: b.draw(self.screen, camera_x)
-            for c in coins: c.draw(self.screen, time, camera_x)
-            for g in gems: g.draw(self.screen, time, camera_x)
-            for s in stars_col: s.draw(self.screen, time, camera_x)
-            for p_up in power_ups: p_up.draw(self.screen, time, camera_x)
-            for e in enemies: e.draw(self.screen, time, camera_x)
-            for b in bosses: b.draw(self.screen, time, camera_x)
-            for p in projectiles: p.draw(self.screen, camera_x)
-            for p in particles: p.draw(self.screen, camera_x)
-            if active_pet: active_pet.draw(self.screen, camera_x)
-            if all_bosses_defeated: portal.draw(self.screen, time, camera_x)
+            for s in scenery: s.draw(self.screen, camera_x, time, cam_y_offset)
+            for hz in hazards: hz.draw(self.screen, camera_x, theme, cam_y_offset)
+            for cp in checkpoints: cp.draw(self.screen, time, camera_x, cam_y_offset)
+            for hp in hidden_portals: hp.draw(self.screen, time, camera_x, cam_y_offset)
+            for p in platforms: p.draw(self.screen, camera_x, theme, cam_y_offset)
+            for b in blocks: b.draw(self.screen, camera_x, cam_y_offset)
+            for c in coins: c.draw(self.screen, time, camera_x, cam_y_offset)
+            for g in gems: g.draw(self.screen, time, camera_x, cam_y_offset)
+            for s in stars_col: s.draw(self.screen, time, camera_x, cam_y_offset)
+            for p_up in power_ups: p_up.draw(self.screen, time, camera_x, cam_y_offset)
+            for e in enemies: e.draw(self.screen, time, camera_x, cam_y_offset)
+            for b in bosses: b.draw(self.screen, time, camera_x, cam_y_offset)
+            for p in projectiles: p.draw(self.screen, camera_x, cam_y_offset)
+            for p in particles: p.draw(self.screen, camera_x, cam_y_offset)
+            if active_pet: active_pet.draw(self.screen, camera_x, cam_y_offset)
+            if all_bosses_defeated: portal.draw(self.screen, time, camera_x, cam_y_offset)
             
-            if not player.dead: player.draw(self.screen, camera_x)
+            if not player.dead: player.draw(self.screen, camera_x, cam_y_offset)
             
             draw_minimap(self.screen, platforms, player, bosses, portal, self.selected_level)
             draw_hud(self.screen, self.font, self.big_font, player, theme, self.selected_level, weapon, bosses)
@@ -798,7 +964,8 @@ class GameEngine:
                 score_txt = self.big_font.render(f"DIST: {max(0, player.rect.x // 100)}m", True, GOLD)
                 self.screen.blit(score_txt, (WIDTH // 2 - score_txt.get_width() // 2, 80))
             
-            cheat_menu.draw(self.screen, self.font, is_immortal, player.coins, is_flappy)
+            if cheat_active:
+                cheat_menu.draw(self.screen, self.font, is_immortal, player.coins, is_flappy)
             
             # Hit-Stop Visual Flash Layer
             if hit_stop > 0:
@@ -814,8 +981,29 @@ class GameEngine:
                 self.screen.fill((0, 0, 0))
                 self.screen.blit(temp_surface, (shake_x, shake_y))
     
-            if player.dead: draw_game_over(self.screen, self.font, self.big_font)
+            if player.dead:
+                draw_game_over(self.screen, self.font, self.big_font)
+                # Death vignette effect
+                vignette = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                vignette.fill((0, 0, 0, 120))
+                self.screen.blit(vignette, (0, 0))
             if level_complete: draw_level_cleared(self.screen, self.font, self.big_font, self.selected_level, player)
+            
+            # Boss defeat slowmo visual overlay
+            if boss_defeat_slowmo:
+                slowmo_overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                alpha = min(80, boss_defeat_timer)
+                slowmo_overlay.fill((255, 200, 50, alpha))
+                self.screen.blit(slowmo_overlay, (0, 0))
+                # Victory text
+                victory_txt = self.big_font.render('BOSS DEFEATED!', True, (255, 215, 0))
+                vx = WIDTH // 2 - victory_txt.get_width() // 2
+                vy = HEIGHT // 2 - 40
+                # Glow behind text
+                glow = pygame.Surface((victory_txt.get_width() + 40, victory_txt.get_height() + 20), pygame.SRCALPHA)
+                glow.fill((0, 0, 0, 160))
+                self.screen.blit(glow, (vx - 20, vy - 10))
+                self.screen.blit(victory_txt, (vx, vy))
 
             if game_mode == 'ENDLESS':
                 if player.rect.x >= 500000:  # 5000m
@@ -846,4 +1034,8 @@ class GameEngine:
             self.achievements.draw(self.screen)
 
             pygame.display.flip()
-            self.clock.tick(FPS)
+            # Boss defeat slowmo: reduce effective FPS
+            if boss_defeat_slowmo:
+                self.clock.tick(FPS // 3)  # 1/3 speed during boss defeat
+            else:
+                self.clock.tick(FPS)

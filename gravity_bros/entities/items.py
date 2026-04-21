@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 from config import GOLD, WHITE, BLACK, ORANGE, DIRT_BROWN
 
 # Cache font for Block globally so it doesn't cause severe lag on draw calls.
@@ -25,7 +26,7 @@ class Block:
             if self.bounce_timer == 0:
                 self.bounce_y = 0
 
-    def draw(self, surface, camera_x):
+    def draw(self, surface, camera_x, camera_y=0):
         global _BLOCK_FONT
         if _BLOCK_FONT is None:
             pygame.font.init()
@@ -34,6 +35,7 @@ class Block:
         color = DIRT_BROWN if self.is_hit else ORANGE
         r = self.rect.copy()
         r.x -= camera_x
+        r.y -= camera_y
         r.y += self.bounce_y
         pygame.draw.rect(surface, color, r)
         pygame.draw.rect(surface, BLACK, r, 2)
@@ -42,36 +44,50 @@ class Block:
             surface.blit(text, (r.x + 8, r.y + 2))
 
 class Particle:
-    def __init__(self, x, y, color, size=4):
-        import random
+    # Pre-allocated surfaces for common sizes to reduce GC pressure
+    _surface_cache = {}
+    
+    def __init__(self, x, y, color, size=4, p_type='default'):
         self.x = x
         self.y = y
         self.vx = random.uniform(-3, 3)
         self.vy = random.uniform(-3, 3)
         self.color = color
-        self.size = random.randint(2, 5)
+        self.size = random.randint(2, max(2, size))
         self.life = 1.0
+        self.p_type = p_type
 
     def update(self):
         self.x += self.vx
         self.y += self.vy
+        if self.p_type == 'default':
+            self.vy += 0.05  # Slight gravity for natural feel
         self.life -= 0.02
 
-    def draw(self, surface, camera_x):
+    def draw(self, surface, camera_x, camera_y=0):
         if self.life > 0:
-            s = pygame.Surface((self.size, self.size))
+            key = (self.size, self.color)
+            cached = Particle._surface_cache.get(key)
+            if cached is None:
+                cached = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+                cached.fill(self.color + (255,) if len(self.color) == 3 else self.color)
+                # Keep cache bounded
+                if len(Particle._surface_cache) > 200:
+                    Particle._surface_cache.clear()
+                Particle._surface_cache[key] = cached
+            s = cached.copy()
             s.set_alpha(int(self.life * 255))
-            s.fill(self.color)
-            surface.blit(s, (self.x - camera_x, self.y))
+            surface.blit(s, (self.x - camera_x, self.y - camera_y))
 
 class Coin:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 16, 24)
 
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         cx = self.rect.centerx - camera_x
+        cy = self.rect.y - camera_y
         w = int(abs(math.sin(time / 150)) * 16) + 4
-        r = pygame.Rect(cx - w // 2, self.rect.y, w, 24)
+        r = pygame.Rect(cx - w // 2, cy, w, 24)
         pygame.draw.ellipse(surface, GOLD, r)
         pygame.draw.ellipse(surface, BLACK, r, 2)
 
@@ -79,12 +95,12 @@ class Gem:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 20, 20)
 
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         cx = self.rect.centerx - camera_x
-        cy = self.rect.centery
+        cy = self.rect.centery - camera_y
         half = self.rect.height // 2
-        points = [(cx, self.rect.top), (cx + half, cy),
-                  (cx, self.rect.bottom), (cx - half, cy)]
+        points = [(cx, self.rect.top - camera_y), (cx + half, cy),
+                  (cx, self.rect.bottom - camera_y), (cx - half, cy)]
         pygame.draw.polygon(surface, (0, 255, 255), points)
         pygame.draw.polygon(surface, BLACK, points, 2)
 
@@ -92,9 +108,9 @@ class Star:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 24, 24)
 
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         cx = self.rect.centerx - camera_x
-        cy = self.rect.centery
+        cy = self.rect.centery - camera_y
         points = []
         for i in range(10):
             angle = math.radians(i * 36 - 90)
@@ -108,9 +124,9 @@ class PowerUp:
         self.rect = pygame.Rect(x, y, 30, 30)
         self.type = p_type
 
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         cx = self.rect.centerx - camera_x
-        cy = self.rect.centery
+        cy = self.rect.centery - camera_y
         color = {'invincibility': (255, 0, 255),
                  'doubleJump': (0, 255, 0),
                  'speedBoost': (255, 255, 0)}.get(self.type, WHITE)
@@ -121,9 +137,10 @@ class Platform:
     def __init__(self, x, y, w, h):
         self.rect = pygame.Rect(x, y, w, h)
 
-    def draw(self, surface, camera_x, theme):
+    def draw(self, surface, camera_x, theme, camera_y=0):
         r = self.rect.copy()
         r.x -= camera_x
+        r.y -= camera_y
         pygame.draw.rect(surface, theme['ground'], r)
         pygame.draw.rect(surface, theme['top'], (r.x, r.y, r.width, 8))
         pygame.draw.rect(surface, BLACK, r, 2)
@@ -132,9 +149,10 @@ class Portal:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 40, 80)
 
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         r = self.rect.copy()
         r.x -= camera_x
+        r.y -= camera_y
         c1, c2 = (153, 50, 204), (230, 230, 250)
         if (time // 200) % 2 == 0:
             c1, c2 = c2, c1
@@ -146,9 +164,10 @@ class Checkpoint:
         self.rect = pygame.Rect(x, y-30, 60, 60) # Bahay Kubo structure
         self.active = False
         
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         r = self.rect.copy()
         r.x -= camera_x
+        r.y -= camera_y
         # Draw Bahay Kubo checkpoint
         color = (0, 255, 0) if self.active else (139, 69, 19)
         roof_color = (0, 200, 0) if self.active else (210, 180, 140)
@@ -168,9 +187,10 @@ class HiddenPortal:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 40, 80)
         
-    def draw(self, surface, time, camera_x):
+    def draw(self, surface, time, camera_x, camera_y=0):
         r = self.rect.copy()
         r.x -= camera_x
+        r.y -= camera_y
         # Draw as a Balete tree trunk (dark brown) with glowing runes
         pygame.draw.rect(surface, (50, 30, 20), r)
         pygame.draw.rect(surface, (30, 15, 10), (r.x+5, r.y, 10, 80))
@@ -197,8 +217,23 @@ class Projectile:
             self.dead = True
             return
 
-        if self.type in ('fireball', 'grenade'):
+        if self.type in ('fireball', 'grenade', 'book'):
             self.vy += 0.5
+
+        if self.type == 'tracking' and player and not player.dead:
+            # Simple homing: look at player and adjust velocity slightly
+            dx = player.rect.centerx - self.rect.centerx
+            dy = player.rect.centery - self.rect.centery
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist > 0:
+                self.vx += (dx/dist) * 0.2
+                self.vy += (dy/dist) * 0.2
+                # Cap speed
+                speed = math.sqrt(self.vx*self.vx + self.vy*self.vy)
+                if speed > 7:
+                    self.vx = (self.vx/speed) * 7
+                    self.vy = (self.vy/speed) * 7
+
             
         self.x += self.vx
         self.rect.x = int(self.x)
@@ -264,10 +299,14 @@ class Projectile:
                 if not self.dead and bosses:
                     for b in bosses:
                         if not b.dead and b.invincible_timer <= 0 and self.rect.colliderect(b.rect):
-                            b.health -= 1
+                            # Dynamic damage for projectiles based on self.damage (init_dmg * 5)
+                            boss_dmg = max(1, int(self.damage // 3))
+                            b.health -= boss_dmg
+                            b.hit_by_projectile = True
                             b.invincible_timer = 15
                             self.dead = True
                             break
+
             elif self.owner == 'enemy' and player and not player.dead:
                 if self.rect.colliderect(player.rect):
                     is_invuln = getattr(player, 'is_immortal', False) or player.is_dashing or player.invincibility_timer > 0
@@ -279,7 +318,7 @@ class Projectile:
                                 player.vel_x = -15 * player.facing
                                 player.vel_y = -10
                         else:
-                            player.die()
+                            player.take_hit()
                     self.dead = True
 
         if self.rect.y > 1400 or self.rect.y < -400:
@@ -299,12 +338,14 @@ class Projectile:
                     dist = _m.hypot(b.rect.centerx - self.rect.centerx,
                                     b.rect.centery - self.rect.centery)
                     if dist < 150:
-                        b.health -= 3
+                        boss_exp_dmg = max(3, int(self.damage // 4))
+                        b.health -= boss_exp_dmg
                         b.invincible_timer = 10
 
-    def draw(self, surface, camera_x):
+    def draw(self, surface, camera_x, camera_y=0):
         r = self.rect.copy()
         r.x -= camera_x
+        r.y -= camera_y
         # ── Generic weapons (kept for boss/skill projectiles) ──
         if self.type == 'fireball':
             pygame.draw.ellipse(surface, (255, 69, 0), r)
@@ -384,26 +425,26 @@ class Scenery:
         self.y = y
         self.type = type_name
 
-    def draw(self, surface, camera_x, time):
+    def draw(self, surface, camera_x, time, camera_y=0):
         x = self.x - camera_x
-        y = self.y
+        y = self.y - camera_y
         if self.type == 'palm_tree':
             sway = math.sin(time / 1000) * 5
-            pygame.draw.rect(surface, (139, 69, 19), (x - 5, y - 60, 10, 60))
-            pygame.draw.circle(surface, (34, 139, 34), (int(x + sway), y - 60), 20)
+            pygame.draw.rect(surface, (139, 69, 19), (int(x - 5), int(y - 60), 10, 60))
+            pygame.draw.circle(surface, (34, 139, 34), (int(x + sway), int(y - 60)), 20)
         elif self.type == 'pine_tree':
             sway = math.sin(time / 1200) * 3
-            pygame.draw.rect(surface, (93, 64, 55), (x - 4, y - 10, 8, 10))
-            pygame.draw.polygon(surface, (27, 94, 32), [(x + sway, y - 50), (x - 20, y - 10), (x + 20, y - 10)])
+            pygame.draw.rect(surface, (93, 64, 55), (int(x - 4), int(y - 10), 8, 10))
+            pygame.draw.polygon(surface, (27, 94, 32), [(int(x + sway), int(y - 50)), (int(x - 20), int(y - 10)), (int(x + 20), int(y - 10))])
         elif self.type == 'hut':
-            pygame.draw.rect(surface, (160, 82, 45), (x - 20, y - 30, 40, 30))
-            pygame.draw.polygon(surface, (139, 69, 19), [(x, y - 50), (x - 25, y - 30), (x + 25, y - 30)])
+            pygame.draw.rect(surface, (160, 82, 45), (int(x - 20), int(y - 30), 40, 30))
+            pygame.draw.polygon(surface, (139, 69, 19), [(int(x), int(y - 50)), (int(x - 25), int(y - 30)), (int(x + 25), int(y - 30))])
         elif self.type == 'lamp':
-            pygame.draw.rect(surface, (51, 51, 51), (x - 2, y - 80, 4, 80))
-            pygame.draw.circle(surface, (255, 215, 0), (int(x), y - 80), 10)
+            pygame.draw.rect(surface, (51, 51, 51), (int(x - 2), int(y - 80), 4, 80))
+            pygame.draw.circle(surface, (255, 215, 0), (int(x), int(y - 80)), 10)
         elif self.type == 'rice_stalk':
             sway = math.sin(time / 800) * 3
-            pygame.draw.line(surface, (50, 205, 50), (x, y), (x + sway, y - 15), 2)
+            pygame.draw.line(surface, (50, 205, 50), (int(x), int(y)), (int(x + sway), int(y - 15)), 2)
 
 class FloatText:
     def __init__(self, x, y, text, color=(255, 255, 0)):
@@ -418,7 +459,7 @@ class FloatText:
         self.y += self.vy
         self.life -= 0.02 # fade out over ~50 frames
 
-    def draw(self, surface, camera_x):
+    def draw(self, surface, camera_x, camera_y=0):
         if self.life > 0:
             global _BLOCK_FONT
             if _BLOCK_FONT is None:
@@ -426,17 +467,20 @@ class FloatText:
                 _BLOCK_FONT = pygame.font.SysFont("monospace", 24, bold=True)
             txt = _BLOCK_FONT.render(self.text, True, self.color)
             txt.set_alpha(int(self.life * 255))
-            surface.blit(txt, (self.x - camera_x - txt.get_width()//2, self.y))
+            surface.blit(txt, (self.x - camera_x - txt.get_width()//2, self.y - camera_y))
 
 class Spike:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 32, 16)
 
-    def draw(self, surface, camera_x, theme):
-        cx = self.rect.centerx - camera_x
-        points = [(self.rect.left - camera_x, self.rect.bottom), 
-                  (cx, self.rect.top), 
-                  (self.rect.right - camera_x, self.rect.bottom)]
+    def draw(self, surface, camera_x, theme, camera_y=0):
+        r = self.rect.copy()
+        r.x -= camera_x
+        r.y -= camera_y
+        cx = r.centerx
+        points = [(r.left, r.bottom), 
+                  (cx, r.top), 
+                  (r.right, r.bottom)]
         pygame.draw.polygon(surface, (180, 180, 180), points)
         pygame.draw.polygon(surface, BLACK, points, 2)
 
@@ -447,16 +491,17 @@ class FallingPlatform:
         self.fall_timer = 30
         self.vy = 0
 
-    def update(self):
+    def update(self, player=None):
         if self.falling:
             self.fall_timer -= 1
             if self.fall_timer <= 0:
                 self.vy += 0.5
                 self.rect.y += int(self.vy)
 
-    def draw(self, surface, camera_x, theme):
+    def draw(self, surface, camera_x, theme, camera_y=0):
         r = self.rect.copy()
         r.x -= camera_x
+        r.y -= camera_y
         if self.falling and self.fall_timer <= 0:
             c = (150, 50, 50)
         elif self.falling:
@@ -466,6 +511,65 @@ class FallingPlatform:
             c = (255, 150, 150)
         pygame.draw.rect(surface, c, r)
         pygame.draw.rect(surface, BLACK, r, 2)
+
+class MovingPlatform:
+    """Platform that moves horizontally or vertically between two points."""
+    def __init__(self, x, y, w, h, move_type='horizontal', distance=200, speed=2):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.start_x = x
+        self.start_y = y
+        self.move_type = move_type  # 'horizontal' or 'vertical'
+        self.distance = distance
+        self.speed = speed
+        self.direction = 1
+        self.progress = 0  # 0 to distance
+
+    def update(self, player=None):
+        self.progress += self.speed * self.direction
+        if self.progress >= self.distance or self.progress <= 0:
+            self.direction *= -1
+        if self.move_type == 'horizontal':
+            self.rect.x = self.start_x + self.progress
+        else:
+            self.rect.y = self.start_y + self.progress
+            
+        # Push player if standing on top
+        if player and not player.dead:
+            # Check if player is standing on this platform
+            if player.rect.colliderect(self.rect.inflate(0, 10)):
+                # Check vertical proximity to ensure they are on top (not just hitting from side)
+                on_top = (player.gravity_dir == 1 and abs(player.rect.bottom - self.rect.top) < 15) or \
+                         (player.gravity_dir == -1 and abs(player.rect.top - self.rect.bottom) < 15)
+                
+                if on_top:
+                    if self.move_type == 'horizontal':
+                        player.rect.x += self.speed * self.direction
+                        player.x = float(player.rect.x)
+                    else:
+                        player.rect.y += self.speed * self.direction
+                        player.y = float(player.rect.y)
+
+
+
+    def draw(self, surface, camera_x, theme, camera_y=0):
+        r = self.rect.copy()
+        r.x -= camera_x
+        r.y -= camera_y
+        # Moving platforms have a distinct look
+        pygame.draw.rect(surface, (100, 180, 255), r)
+        pygame.draw.rect(surface, (60, 120, 200), (r.x, r.y, r.width, 6))
+        pygame.draw.rect(surface, BLACK, r, 2)
+        # Direction arrow
+        cx = r.centerx
+        cy = r.centery
+        if self.move_type == 'horizontal':
+            pygame.draw.polygon(surface, (255, 255, 255), [
+                (cx - 5, cy), (cx + 5, cy - 4), (cx + 5, cy + 4)
+            ])
+        else:
+            pygame.draw.polygon(surface, (255, 255, 255), [
+                (cx, cy - 5), (cx - 4, cy + 5), (cx + 4, cy + 5)
+            ])
 
 class Pet:
     def __init__(self, type_name):
@@ -496,8 +600,8 @@ class Pet:
                         e.take_damage(2)
                         break
 
-    def draw(self, surface, camera_x):
-        r = pygame.Rect(int(self.x) - camera_x - 10, int(self.y) - 10, 20, 20)
+    def draw(self, surface, camera_x, camera_y=0):
+        r = pygame.Rect(int(self.x) - camera_x - 10, int(self.y) - camera_y - 10, 20, 20)
         if self.type == 'Tarsier':
             pygame.draw.rect(surface, (139, 69, 19), r)
             if self.facing == 1:

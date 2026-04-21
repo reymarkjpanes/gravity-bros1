@@ -503,24 +503,119 @@ def get_background(level, w=None, h=None):
     key = (level, w, h)
     if key not in _bg_cache:
         idx = (level - 1) % len(_BUILDERS)
-        _bg_cache[key] = _BUILDERS[idx](w, h)
+        layers = _BUILDERS[idx](w, h)
+        # Add foreground layer if not present
+        if 'near' not in layers:
+            layers['near'] = _build_foreground(level, w, h)
+        _bg_cache[key] = layers
     return _bg_cache[key]
 
-def draw_background(screen, level, camera_x, time):
+def _build_foreground(level, w, h):
+    """Build a near-foreground parallax layer that scrolls faster for depth."""
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    random.seed(level * 100 + 77)
+    
+    if level in [1, 2]:  # Rice fields — tall grass blades at bottom
+        for gx in range(0, w, 8):
+            gh = random.randint(15, 35)
+            sway = random.randint(-5, 5)
+            gc = (random.randint(40, 80), random.randint(140, 200), random.randint(20, 60))
+            pygame.draw.line(surf, gc, (gx, h), (gx + sway, h - gh), 2)
+    
+    elif level == 3:  # Beach — sand particles
+        for _ in range(30):
+            px = random.randint(0, w)
+            py = random.randint(int(h * 0.85), h)
+            pygame.draw.circle(surf, (245, 235, 200), (px, py), random.randint(2, 5))
+    
+    elif level == 4:  # Cave — hanging moss
+        for mx in range(0, w, 30):
+            mh = random.randint(10, 30)
+            pygame.draw.line(surf, (30, 80, 40), (mx, 0), (mx, mh), 2)
+            pygame.draw.circle(surf, (30, 80, 40), (mx, mh), 3)
+    
+    elif level == 5:  # Volcano — floating embers
+        for _ in range(40):
+            ex = random.randint(0, w)
+            ey = random.randint(0, h)
+            er = random.randint(1, 3)
+            pygame.draw.circle(surf, (255, random.randint(100, 200), 0), (ex, ey), er)
+    
+    elif level == 6:  # Mountains — cloud wisps
+        for _ in range(8):
+            cx = random.randint(0, w)
+            cy = random.randint(int(h * 0.3), int(h * 0.7))
+            cw = random.randint(60, 140)
+            ch_l = random.randint(12, 25)
+            cs = pygame.Surface((cw, ch_l), pygame.SRCALPHA)
+            cs.fill((255, 255, 255, 30))
+            surf.blit(cs, (cx, cy))
+    
+    elif level == 7:  # Ocean — light caustics
+        for _ in range(15):
+            cx = random.randint(0, w)
+            cy = random.randint(0, h)
+            cr = random.randint(10, 30)
+            pygame.draw.circle(surf, (100, 200, 255), (cx, cy), cr)
+    
+    elif level == 8:  # Jungle — falling leaves
+        for _ in range(20):
+            lx = random.randint(0, w)
+            ly = random.randint(0, h)
+            lc = (random.randint(30, 80), random.randint(120, 200), random.randint(20, 60))
+            pygame.draw.ellipse(surf, lc, (lx, ly, random.randint(6, 12), random.randint(4, 8)))
+    
+    elif level == 9:  # Vigan — warm light streaks
+        for _ in range(10):
+            lx = random.randint(0, w)
+            lw = random.randint(3, 8)
+            ls = pygame.Surface((lw, h), pygame.SRCALPHA)
+            for ly in range(h):
+                a = int(15 * (1.0 - ly / h))
+                pygame.draw.line(ls, (255, 200, 100, a), (0, ly), (lw, ly))
+            surf.blit(ls, (lx, 0))
+    
+    elif level == 10:  # Manila — rain streaks
+        for _ in range(50):
+            rx = random.randint(0, w)
+            ry = random.randint(0, h)
+            rl = random.randint(8, 20)
+            pygame.draw.line(surf, (150, 180, 255), (rx, ry), (rx - 2, ry + rl), 1)
+    
+    random.seed()
+    return surf
+
+def draw_background(screen, level, camera_x, time, camera_y=0):
     layers = get_background(level)
     sky =  layers['sky']
     mid =  layers['mid']
     fg  =  layers['fg']
+    near = layers.get('near')
     
     sky_x = int(camera_x * 0.05) % sky.get_width()
     mid_x = int(camera_x * 0.25) % mid.get_width()
     fg_x  = int(camera_x * 0.70) % fg.get_width()
     
+    # Vertical parallax offsets
+    mid_y = -int(camera_y * 0.15)
+    fg_y = -int(camera_y * 0.40)
+    near_y = -int(camera_y * 0.80)
+
+    # Sky (0.05x horizontal, no vertical or very subtle)
     screen.blit(sky, (-sky_x, 0))
     if sky_x > 0: screen.blit(sky, (sky.get_width() - sky_x, 0))
     
-    screen.blit(mid, (-mid_x, 0))
-    if mid_x > 0: screen.blit(mid, (mid.get_width() - mid_x, 0))
+    # Mid Layer
+    screen.blit(mid, (-mid_x, mid_y))
+    if mid_x > 0: screen.blit(mid, (mid.get_width() - mid_x, mid_y))
     
-    screen.blit(fg, (-fg_x, 0))
-    if fg_x > 0: screen.blit(fg, (fg.get_width() - fg_x, 0))
+    # Foreground Layer
+    screen.blit(fg, (-fg_x, fg_y))
+    if fg_x > 0: screen.blit(fg, (fg.get_width() - fg_x, fg_y))
+    
+    # Near-foreground layer: scrolls FASTER for depth
+    if near:
+        near_x = int(camera_x * 1.2) % near.get_width()
+        screen.blit(near, (-near_x, near_y))
+        if near_x > 0: screen.blit(near, (near.get_width() - near_x, near_y))
+

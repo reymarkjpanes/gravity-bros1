@@ -1,4 +1,5 @@
 import pygame
+import math
 from config import WIDTH, HEIGHT, WHITE, GOLD, RED, ORANGE, GREEN
 
 def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosses=None):
@@ -58,9 +59,36 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosse
     screen.blit(score_text, (20, 10))
     screen.blit(coins_text, (20, 35))
     
+    # ── HP Hearts ──
+    hp = getattr(player, 'hp', 3)
+    max_hp = getattr(player, 'max_hp', 3)
+    heart_x = 20
+    heart_y = 58
+    for i in range(max_hp):
+        cx = heart_x + i * 22
+        cy = heart_y + 8
+        if i < hp:
+            # Full heart — red with slight pulse
+            pulse = 1.0 + 0.1 * math.sin(pygame.time.get_ticks() * 0.005 + i * 0.5)
+            r = int(8 * pulse)
+            # Heart shape using two circles and a triangle
+            pygame.draw.circle(screen, (220, 20, 30), (cx - 3, cy - 2), r // 2 + 2)
+            pygame.draw.circle(screen, (220, 20, 30), (cx + 3, cy - 2), r // 2 + 2)
+            pygame.draw.polygon(screen, (220, 20, 30), [
+                (cx - r // 2 - 2, cy), (cx + r // 2 + 2, cy), (cx, cy + r)
+            ])
+            # Highlight
+            pygame.draw.circle(screen, (255, 100, 100), (cx - 2, cy - 3), 2)
+        else:
+            # Empty heart — dark outline
+            pygame.draw.circle(screen, (80, 20, 20), (cx - 3, cy - 2), 5)
+            pygame.draw.circle(screen, (80, 20, 20), (cx + 3, cy - 2), 5)
+            pygame.draw.polygon(screen, (80, 20, 20), [
+                (cx - 6, cy), (cx + 6, cy), (cx, cy + 7)
+            ])
+    
     combo = getattr(player, 'combo_kills', 0)
     if combo > 1:
-        import math as _m
         # Color escalation
         if combo >= 10: c_color = (255, 0, 0)
         elif combo >= 6: c_color = ORANGE
@@ -72,13 +100,13 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosse
         elif combo >= 3: mult = "×1.5"
         else: mult = ""
         # Pulsing scale effect
-        pulse = 1.0 + 0.1 * _m.sin(pygame.time.get_ticks() * 0.01)
+        pulse = 1.0 + 0.1 * math.sin(pygame.time.get_ticks() * 0.01)
         combo_str = f"COMBO ×{combo}! {mult}"
         combo_surf = big_font.render(combo_str, True, c_color)
         pw = int(combo_surf.get_width() * pulse)
         ph = int(combo_surf.get_height() * pulse)
         combo_surf = pygame.transform.scale(combo_surf, (max(1, pw), max(1, ph)))
-        screen.blit(combo_surf, (20, 65))
+        screen.blit(combo_surf, (20, 80))
         
     # Right Block
     gravity_text = font.render(f"GRAVITY: {'UP' if getattr(player, 'gravity_dir', 1) == -1 else 'DOWN'}", True, WHITE)
@@ -170,12 +198,12 @@ def draw_pause_menu(screen, font, big_font):
     
     c1 = font.render("--- CONTROLS ---", True, (0, 255, 255))
     c2 = font.render("Move: A/D or LEFT/RIGHT", True, WHITE)
-    c3 = font.render("Jump: W or UP Arrow", True, WHITE)
+    c3 = font.render("Jump: W or UP Arrow  (Wall Jump supported!)", True, WHITE)
     c4 = font.render("Basic Attack: F  |  Unique Skill: E", True, WHITE)
     c4b = font.render("Awaken Ultimate: R  (requires Awaken)", True, (255, 215, 0))
     c5 = font.render("Melee Attack: Q", True, (255, 200, 0))
-    c6 = font.render("Gravity Dash: CTRL", True, (0, 200, 255))
-    c7 = font.render("Flip Gravity: G", True, (255, 100, 100))
+    c6 = font.render("Gravity Dash: CTRL  |  Flip Gravity: G", True, (0, 200, 255))
+    c7 = font.render("Wall Slide: Hold into wall while airborne", True, (200, 200, 255))
     c8 = font.render("Cheats: C  |  Quit to Menu: Q (while paused)", True, ORANGE)
     
     for i, t in enumerate([c1, c2, c3, c4, c4b, c5, c6, c7, c8]):
@@ -190,6 +218,20 @@ def draw_game_over(screen, font, big_font):
     screen.blit(go_text, (WIDTH//2 - go_text.get_width()//2, HEIGHT//2 - 20))
     screen.blit(r_text, (WIDTH//2 - r_text.get_width()//2, HEIGHT//2 + 30))
 
+def _calc_star_rating(player):
+    """Calculate 1-3 star rating based on performance."""
+    stars = 1  # Base: you completed it
+    # ★★: Collected 80%+ coins
+    total = getattr(player, 'level_coins_total', 0)
+    collected = getattr(player, 'level_coins', 0)
+    if total > 0 and collected >= total * 0.8:
+        stars = 2
+    # ★★★: No deaths AND all stars collected
+    deaths = getattr(player, 'death_count', 0)
+    if deaths == 0 and stars >= 2:
+        stars = 3
+    return stars
+
 def draw_level_cleared(screen, font, big_font, current_level, player=None):
     overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
     overlay.fill((10, 15, 30, 220))
@@ -197,22 +239,36 @@ def draw_level_cleared(screen, font, big_font, current_level, player=None):
     
     # Header
     lc_text = big_font.render("MISSION ACCOMPLISHED!", True, GOLD)
-    screen.blit(lc_text, (WIDTH//2 - lc_text.get_width()//2, HEIGHT//2 - 130))
+    screen.blit(lc_text, (WIDTH//2 - lc_text.get_width()//2, HEIGHT//2 - 150))
+    
+    # Star Rating
+    if player:
+        star_count = _calc_star_rating(player)
+        star_str = "★" * star_count + "☆" * (3 - star_count)
+        star_colors = [(255, 215, 0), (200, 200, 200)]
+        # Draw each star individually for color
+        star_x = WIDTH // 2 - 60
+        for i, ch_star in enumerate(star_str):
+            color = (255, 215, 0) if ch_star == "★" else (80, 80, 80)
+            s_surf = big_font.render(ch_star, True, color)
+            screen.blit(s_surf, (star_x + i * 40, HEIGHT//2 - 110))
     
     # Stats Panel
-    pygame.draw.rect(screen, (30, 40, 60), (WIDTH//2 - 200, HEIGHT//2 - 60, 400, 150), border_radius=15)
-    pygame.draw.rect(screen, (100, 150, 255), (WIDTH//2 - 200, HEIGHT//2 - 60, 400, 150), 3, border_radius=15)
+    pygame.draw.rect(screen, (30, 40, 60), (WIDTH//2 - 200, HEIGHT//2 - 60, 400, 180), border_radius=15)
+    pygame.draw.rect(screen, (100, 150, 255), (WIDTH//2 - 200, HEIGHT//2 - 60, 400, 180), 3, border_radius=15)
     
     # Draw stats if player is provided
     if player:
+        deaths = getattr(player, 'death_count', 0)
         stats = [
             ("Score Earned:", str(getattr(player, 'level_score', 0)), WHITE),
             ("Total Coins:", str(player.coins), GOLD),
-            ("Max Combo:", str(getattr(player, 'combo_kills', 0)), (255, 150, 50))
+            ("Max Combo:", str(getattr(player, 'combo_kills', 0)), (255, 150, 50)),
+            ("Deaths:", str(deaths), (255, 100, 100) if deaths > 0 else (100, 255, 100)),
         ]
         
         for i, (label, val, color) in enumerate(stats):
-            y_pos = HEIGHT//2 - 40 + (i * 40)
+            y_pos = HEIGHT//2 - 40 + (i * 38)
             l_surf = font.render(label, True, (200, 200, 200))
             v_surf = font.render(val, True, color)
             screen.blit(l_surf, (WIDTH//2 - 170, y_pos))
@@ -220,4 +276,4 @@ def draw_level_cleared(screen, font, big_font, current_level, player=None):
 
     next_lvl = current_level + 1 if current_level < 10 else 1
     prep_text = font.render(f"Proceeding to Level {next_lvl}...", True, (150, 255, 150))
-    screen.blit(prep_text, (WIDTH//2 - prep_text.get_width()//2, HEIGHT//2 + 120))
+    screen.blit(prep_text, (WIDTH//2 - prep_text.get_width()//2, HEIGHT//2 + 150))
