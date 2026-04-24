@@ -1,4 +1,5 @@
 {
+  "save_version": 1,
   "unlocked_levels": [
     1,
     2,
@@ -12,41 +13,51 @@
     10,
     11
   ],
-  "current_level": 10,
-  "score": 104350,
-  "coins": 599283,
-  "gems": 13,
-  "stars": 3,
-  "global_xp": 11095,
-  "global_level": 12,
+  "current_level": 4,
+  "score": 133850,
+  "coins": 491955,
+  "gems": 20,
+  "stars": 7,
+  "global_xp": 9440,
+  "global_level": 15,
   "unlocked_skins": [
     "Default"
   ],
   "selected_skin": "Default",
   "unlocked_characters": [
     "Juan",
-    "LapuLapu"
+    "LapuLapu",
+    "Andres"
   ],
-  "selected_character": "LapuLapu",
+  "selected_character": "Andres",
   "unlocked_powerups": [
     "None"
   ],
   "selected_powerup": "None",
   "unlocked_pets": [
-    "None"
+    "None",
+    "Tarsier"
   ],
-  "selected_pet": "None",
+  "selected_pet": "Tarsier",
   "unlocked_upgrades": [],
   "unlocked_evolutions": [
-    "LapuLapu"
+    "LapuLapu",
+    "Andres"
   ],
   "unlocked_skills": [],
-  "skill_points": 49,
+  "skill_points": 55,
   "achievements_unlocked": [
     "first_blood",
     "boss_killer",
     "melee_only"
   ],
-  "high_scores": {},
+  "high_scores": {
+    "survival": 0,
+    "challenge_coin_rush": 0,
+    "challenge_enemy_clear": 0,
+    "challenge_no_damage": 0,
+    "challenge_gravity_flip_only": 0,
+    "challenge_boss_rush_timed": 0
+  },
   "screen_shake_enabled": true
 }

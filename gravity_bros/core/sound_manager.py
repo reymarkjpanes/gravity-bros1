@@ -2,6 +2,7 @@ import pygame
 import os
 import math
 import struct
+import sys
 import wave
 
 class SoundManager:
@@ -186,7 +187,10 @@ class SoundManager:
 
     def play(self, name: str):
         self._init_sounds()
-        if name in self.sounds and self.sounds[name]:
+        if name not in self.sounds:
+            print(f"[WARNING] Sound not loaded: {name!r}", file=sys.stderr)
+            return
+        if self.sounds[name]:
             self.sounds[name].play()
 
     def set_volume(self, vol):

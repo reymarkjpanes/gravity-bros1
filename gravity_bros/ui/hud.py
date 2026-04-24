@@ -164,6 +164,77 @@ def draw_hud(screen, font, big_font, player, theme, current_level, weapon, bosse
             enrage_txt = font.render("! ENRAGED !", True, RED)
             screen.blit(enrage_txt, (WIDTH // 2 - enrage_txt.get_width() // 2, HEIGHT - 95))
 
+def draw_survival_hud(screen, font, wave_number, enemies_remaining, countdown_timer):
+    """Render survival mode HUD at top-center: wave number, enemy count, inter-wave countdown."""
+    y = 80
+    wave_surf = font.render(f"WAVE {wave_number}", True, GOLD)
+    screen.blit(wave_surf, (WIDTH // 2 - wave_surf.get_width() // 2, y))
+
+    enemies_surf = font.render(f"{enemies_remaining} enemies remaining", True, WHITE)
+    screen.blit(enemies_surf, (WIDTH // 2 - enemies_surf.get_width() // 2, y + 28))
+
+    if countdown_timer > 0:
+        secs = countdown_timer // 60 + 1
+        cd_surf = font.render(f"Next wave in {secs}s", True, (255, 255, 0))
+        screen.blit(cd_surf, (WIDTH // 2 - cd_surf.get_width() // 2, y + 56))
+
+
+def draw_challenge_hud(screen, font, objective, time_remaining, progress, target):
+    """Render challenge mode HUD at top-center: objective, timer, progress."""
+    y = 80
+    obj_surf = font.render(objective, True, WHITE)
+    screen.blit(obj_surf, (WIDTH // 2 - obj_surf.get_width() // 2, y))
+
+    secs = time_remaining // 60
+    timer_color = RED if time_remaining < 10 * 60 else GOLD
+    timer_surf = font.render(f"TIME: {secs}s", True, timer_color)
+    screen.blit(timer_surf, (WIDTH // 2 - timer_surf.get_width() // 2, y + 28))
+
+    if target > 0:
+        prog_surf = font.render(f"{progress}/{target}", True, WHITE)
+        screen.blit(prog_surf, (WIDTH // 2 - prog_surf.get_width() // 2, y + 56))
+
+
+def draw_survival_game_over(screen, font, big_font, wave_number, score):
+    """Render survival game-over overlay with wave reached, score, and replay prompt."""
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+
+    title_surf = big_font.render("SURVIVAL OVER", True, RED)
+    screen.blit(title_surf, (WIDTH // 2 - title_surf.get_width() // 2, HEIGHT // 2 - 100))
+
+    wave_surf = font.render(f"Reached Wave {wave_number}", True, GOLD)
+    screen.blit(wave_surf, (WIDTH // 2 - wave_surf.get_width() // 2, HEIGHT // 2 - 30))
+
+    score_surf = font.render(f"Score: {score}", True, WHITE)
+    screen.blit(score_surf, (WIDTH // 2 - score_surf.get_width() // 2, HEIGHT // 2 + 10))
+
+    retry_surf = font.render("Press R to Play Again", True, WHITE)
+    screen.blit(retry_surf, (WIDTH // 2 - retry_surf.get_width() // 2, HEIGHT // 2 + 60))
+
+
+def draw_challenge_result(screen, font, big_font, stars, coins_earned, failed):
+    """Render challenge result overlay: stars or failed, coins earned, retry prompt."""
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+
+    if failed:
+        title_surf = big_font.render("FAILED", True, RED)
+        screen.blit(title_surf, (WIDTH // 2 - title_surf.get_width() // 2, HEIGHT // 2 - 100))
+    else:
+        star_str = "★" * max(0, min(3, stars)) + "☆" * (3 - max(0, min(3, stars)))
+        star_surf = big_font.render(star_str, True, GOLD)
+        screen.blit(star_surf, (WIDTH // 2 - star_surf.get_width() // 2, HEIGHT // 2 - 100))
+
+        coins_surf = font.render(f"Coins earned: {coins_earned}", True, GOLD)
+        screen.blit(coins_surf, (WIDTH // 2 - coins_surf.get_width() // 2, HEIGHT // 2 - 30))
+
+    retry_surf = font.render("Press R to Retry", True, WHITE)
+    screen.blit(retry_surf, (WIDTH // 2 - retry_surf.get_width() // 2, HEIGHT // 2 + 30))
+
+
 def draw_minimap(screen, platforms, player, bosses, portal, current_level):
     map_w = 200
     map_h = 40

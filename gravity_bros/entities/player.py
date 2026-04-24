@@ -1,6 +1,7 @@
 import pygame
 import math
 import os
+import sys
 import random as _rnd
 from .items import Block, Particle, Projectile, FloatText
 from core.sound_manager import sounds
@@ -101,15 +102,42 @@ class Player(pygame.sprite.Sprite):
                     path = os.path.join(assets_dir, f'player_{char}_{state}_{d}.png')
                     if os.path.exists(path):
                         self.images[f'{char}_{state}_{d}'] = pygame.image.load(path).convert_alpha()
+                    else:
+                        surf = pygame.Surface((24, 32))
+                        surf.fill((200, 100, 200))
+                        self.images[f'{char}_{state}_{d}'] = surf
+                        print(f"[WARNING] Sprite not found: {path}", file=sys.stderr)
+
+    def respawn(self, x: int, y: int) -> None:
+        """Atomically reset the player to a clean playable state at (x, y)."""
+        self.rect.x = x
+        self.rect.y = y
+        self.vel_x = 0.0
+        self.vel_y = 0.0
+        self.hp = self.max_hp
+        self.dead = False
+        self.invincibility_timer = 120
+        self.is_dashing = False
+        self.is_mounted = False
+        self.shield_active = False
+        self.gravity_dir = 1
+        # Reset all active timers
+        for attr in ('speed_boost_timer', 'ability_cooldown', 'ability_timer',
+                     'dash_timer', 'dash_cooldown', 'melee_timer', 'attack_cooldown',
+                     'combo_timer', 'awaken_cooldown', 'awaken_timer',
+                     'wall_jump_lockout', 'jump_buffer_timer', 'tongue_drain_timer'):
+            setattr(self, attr, 0)
+        self.tongue_target = None
 
     def update(self, platforms, enemies, bosses, blocks, coins, gems,
                collectible_stars, power_ups, is_immortal, particles, projectiles, screen_height):
-               
+        """Orchestrator: tick timers, then delegate to focused sub-methods."""
+
         effects = {'screen_shake': 0}
         if getattr(self, '_requested_shake', 0) > 0:
             effects['screen_shake'] = self._requested_shake
             self._requested_shake = 0
-            
+
         if self.dead:
             # Death freeze for dramatic pause
             if self.death_freeze_timer > 0:
@@ -136,10 +164,66 @@ class Player(pygame.sprite.Sprite):
 
         if self.shield_active and self.ability_timer <= 0:
             self.shield_active = False
-            
+
         if self.is_dashing and self.dash_timer <= 0:
             self.is_dashing = False
 
+        # Read keys exactly once — passed down to all sub-methods
+        keys = pygame.key.get_pressed()
+
+        # ── Physics: movement, gravity, collisions, landing ──
+        self._apply_physics(keys, platforms, blocks, particles, effects)
+
+        # ── Enemy / boss contact ──
+        is_truly_invuln = is_immortal or self.invincibility_timer > 0 or self.is_dashing or self.is_mounted
+        self._handle_enemy_contact(enemies, bosses, is_truly_invuln, particles, effects)
+
+        # ── Item collection ──
+        self._collect_items(coins, gems, collectible_stars, power_ups, particles)
+
+        ch = self.selected_character
+
+        # Fall out of world
+        if self.gravity_dir == 1:
+            if self.rect.top > screen_height - 30:
+                if not is_immortal: self.die(particles)
+                else:
+                    self.rect.bottom = screen_height - 30
+                    self.vel_y = -self.jump_power
+        else:
+            if self.rect.bottom < 30:
+                if not is_immortal: self.die(particles)
+                else:
+                    self.rect.top = 30
+                    self.vel_y = float(self.jump_power)
+
+        if self.rect.left < 0: self.rect.left = 0
+
+        # Chlorophyll Boost
+        if ch == 'Malunggay':
+            if pygame.time.get_ticks() % 300 == 0:
+                self.level_score += 10
+
+        if abs(self.vel_x) > 6 or self.dash_timer > 0 or self.speed_boost_timer > 0:
+            self.trail.append((self.rect.x, self.rect.y, self.facing, self.gravity_dir, 150))
+
+        if getattr(self, 'is_evolved', False) and pygame.time.get_ticks() % 5 == 0:
+            particles.append(Particle(self.rect.centerx, self.rect.centery, (255, 215, 0), size=5))
+
+        new_trail = []
+        for tx, ty, tf, tg, alpha in self.trail:
+            alpha -= 15
+            if alpha > 0:
+                new_trail.append((tx, ty, tf, tg, alpha))
+        self.trail = new_trail
+
+        return effects
+
+    # ── Private sub-methods ───────────────────────────────────────────────────
+
+    def _apply_physics(self, keys, platforms, blocks, particles, effects):
+        """Apply gravity, velocity integration, wall slide, coyote time,
+        jump buffer, movement, and landing detection. Modifies self in place."""
         ch = self.selected_character
         self.jump_power = 19 if ch == 'Tikbalang' else 14
         current_speed = 7 if ch == 'Batak' else 5
@@ -153,7 +237,6 @@ class Player(pygame.sprite.Sprite):
             current_speed *= 2.0
             self.jump_power = 18
 
-        keys = pygame.key.get_pressed()
         self.vel_x = 0.0
 
         if not self.is_dashing:
@@ -165,7 +248,7 @@ class Player(pygame.sprite.Sprite):
                 self.facing = 1
         else:
             self.vel_x = self.facing * (current_speed * 3.5)
-            self.vel_y = 0 # Hover while dashing
+            self.vel_y = 0  # Hover while dashing
 
         # Manananggal flight
         if ch == 'Manananggal':
@@ -176,27 +259,27 @@ class Player(pygame.sprite.Sprite):
             elif not shift:
                 self.flight_stamina = min(100, self.flight_stamina + 0.5)
 
-        # Horizontal
+        # Horizontal movement
         self.on_wall = 0  # Reset wall contact
         self.rect.x += int(self.vel_x)
-        self._collide(self.vel_x, 0, platforms, blocks)
+        self._collide(self.vel_x, 0, platforms, blocks, keys)
 
-        # Vertical
+        # Capture vel_y before gravity for landing detection
         vel_y_before = self.vel_y
-        
+
         # Wall slide: slow descent when touching a wall and pressing into it
         if self.on_wall != 0 and not self.on_ground and self.vel_y > 0 and self.wall_jump_lockout <= 0:
             self.vel_y = min(self.vel_y, 2.0)  # Cap fall speed to slow slide
             self.wall_slide_timer += 1
         else:
             self.wall_slide_timer = 0
-        
+
         self.vel_y += self.gravity * self.gravity_dir
         self.vel_y = max(-25.0, min(25.0, self.vel_y))
         self.rect.y += int(self.vel_y)
         self.was_on_ground = self.on_ground
         self.on_ground = False
-        self._collide(0, self.vel_y, platforms, blocks)
+        self._collide(0, self.vel_y, platforms, blocks, keys)
 
         # ── Coyote Time: track frames since leaving ground ──
         if self.on_ground:
@@ -219,7 +302,6 @@ class Player(pygame.sprite.Sprite):
             # Landing dust & squash
             if self.was_on_ground is False and abs(vel_y_before) > 3:
                 self.squash_timer = 6  # squash frames
-                # Landing dust particles
                 dust_count = min(8, int(abs(vel_y_before)))
                 for _ in range(dust_count):
                     particles.append(Particle(
@@ -234,77 +316,10 @@ class Player(pygame.sprite.Sprite):
         # Melee hitbox update
         self.melee_hitbox.center = (self.rect.centerx + (self.facing * 20), self.rect.centery)
 
-        # Collision with enemies
-        is_truly_invuln = is_immortal or self.invincibility_timer > 0 or self.is_dashing or self.is_mounted
-        for e in enemies:
-            if not e.dead and self.rect.colliderect(e.rect):
-                if self.is_mounted:
-                    e.dead = True
-                    self.score += 20
-                    self.mount_hp -= 1
-                    particles.append(Particle(e.rect.centerx, e.rect.centery, (150, 150, 150), 10, "spark"))
-                    if self.mount_hp <= 0:
-                        self.is_mounted = False
-                        effects['screen_shake'] = 10
-                        sounds.play('die')
-                        for _ in range(20): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=6))
-                elif not is_truly_invuln:
-                    # ── Stomp Mechanic ──
-                    is_falling = (self.vel_y * self.gravity_dir) > 0
-                    is_above = (self.rect.bottom < e.rect.centery) if self.gravity_dir == 1 else (self.rect.top > e.rect.centery)
-                    if is_falling and is_above:
-                        e.take_damage(5)
-                        self.vel_y = -10 * self.gravity_dir # Bounce
-                        self.has_double_jumped = False
-                        self.score += 50
-                        particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 8))
-                        sounds.play('stomp')
-                    else:
-                        self.take_hit(particles, effects)
+    def _collect_items(self, coins, gems, collectible_stars, power_ups, particles):
+        """Handle all item pickup logic. Modifies self.score, self.coins, etc. in place."""
+        ch = self.selected_character
 
-                elif self.is_dashing:
-                    e.take_damage(2)
-                    self.score += 50
-                    effects['hit_stop'] = 6
-                    effects['screen_shake'] = 4
-                    particles.append(Particle(e.rect.centerx, e.rect.centery, (0, 255, 255), 10))
-            
-            if self.melee_timer > 0 and self.melee_hitbox.colliderect(e.rect):
-                e.take_damage(2)
-                self.score += 50
-                effects['hit_stop'] = 8
-                effects['screen_shake'] = 5
-                particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 10))
-
-        # Bosses
-        for b in bosses:
-            if self.rect.colliderect(b.rect) and not is_truly_invuln and b.health > 0:
-                if self.is_mounted:
-                    self.is_mounted = False
-                    self.vel_x = -15 * self.facing
-                    self.vel_y = -10
-                    b.health -= 50
-                    b.hit_by_melee = True
-                    effects['screen_shake'] = 20
-                    for _ in range(30): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=10))
-                else:
-                    self.take_hit(particles, effects)
-            elif self.rect.colliderect(b.rect) and self.is_dashing and b.invincible_timer <= 0:
-                b.health -= 25
-                b.hit_by_melee = True
-                b.invincible_timer = 20
-                effects['hit_stop'] = 12
-                effects['screen_shake'] = 10
-                particles.append(Particle(b.rect.centerx, b.rect.centery, (0, 255, 255), 15))
-            elif self.melee_timer > 0 and self.melee_hitbox.colliderect(b.rect) and b.invincible_timer <= 0:
-                b.health -= 50
-                b.hit_by_melee = True
-                b.invincible_timer = 20
-                effects['hit_stop'] = 15
-                effects['screen_shake'] = 12
-                particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 0, 0), 20))
-
-        # Items
         for c in coins[:]:
             if self.rect.colliderect(c.rect):
                 sounds.play('coin')
@@ -339,51 +354,85 @@ class Player(pygame.sprite.Sprite):
                 if p.type == 'invincibility': self.invincibility_timer = 600
                 elif p.type == 'doubleJump': self.double_jump_active = True
                 elif p.type == 'speedBoost': self.speed_boost_timer = 600
-                elif p.type == 'flower': # We map the unused flower to the TRICYCLE MOUNT!
+                elif p.type == 'flower':  # We map the unused flower to the TRICYCLE MOUNT!
                     self.is_mounted = True
                     self.mount_hp = 10
                 power_ups.remove(p)
 
-        # Fall out of world
-        if self.gravity_dir == 1:
-            if self.rect.top > screen_height - 30:
-                if not is_immortal: self.die(particles)
-                else: 
-                    self.rect.bottom = screen_height - 30
-                    self.vel_y = -self.jump_power
-        else:
-            if self.rect.bottom < 30:
-                if not is_immortal: self.die(particles)
+    def _handle_enemy_contact(self, enemies, bosses, is_invuln, particles, effects):
+        """Handle all enemy/boss contact logic. Mutates effects dict in place."""
+        for e in enemies:
+            if not e.dead and self.rect.colliderect(e.rect):
+                if self.is_mounted:
+                    e.dead = True
+                    self.score += 20
+                    self.mount_hp -= 1
+                    particles.append(Particle(e.rect.centerx, e.rect.centery, (150, 150, 150), 10, "spark"))
+                    if self.mount_hp <= 0:
+                        self.is_mounted = False
+                        effects['screen_shake'] = 10
+                        sounds.play('die')
+                        for _ in range(20): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=6))
+                elif not is_invuln:
+                    # ── Stomp Mechanic ──
+                    is_falling = (self.vel_y * self.gravity_dir) > 0
+                    is_above = (self.rect.bottom < e.rect.centery) if self.gravity_dir == 1 else (self.rect.top > e.rect.centery)
+                    if is_falling and is_above:
+                        e.take_damage(5)
+                        self.vel_y = -10 * self.gravity_dir  # Bounce
+                        self.has_double_jumped = False
+                        self.score += 50
+                        particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 8))
+                        sounds.play('stomp')
+                    else:
+                        self.take_hit(particles, effects)
+                elif self.is_dashing:
+                    e.take_damage(2)
+                    self.score += 50
+                    effects['hit_stop'] = 6
+                    effects['screen_shake'] = 4
+                    particles.append(Particle(e.rect.centerx, e.rect.centery, (0, 255, 255), 10))
+
+            if self.melee_timer > 0 and self.melee_hitbox.colliderect(e.rect):
+                e.take_damage(2)
+                self.score += 50
+                effects['hit_stop'] = 8
+                effects['screen_shake'] = 5
+                particles.append(Particle(e.rect.centerx, e.rect.centery, (255, 255, 255), 10))
+
+        # Bosses
+        for b in bosses:
+            if self.rect.colliderect(b.rect) and not is_invuln and b.health > 0:
+                if self.is_mounted:
+                    self.is_mounted = False
+                    self.vel_x = -15 * self.facing
+                    self.vel_y = -10
+                    b.health -= 50
+                    b.hit_by_melee = True
+                    effects['screen_shake'] = 20
+                    for _ in range(30): particles.append(Particle(self.rect.centerx, self.rect.centery, (200, 200, 200), size=10))
                 else:
-                    self.rect.top = 30
-                    self.vel_y = float(self.jump_power)
+                    self.take_hit(particles, effects)
+            elif self.rect.colliderect(b.rect) and self.is_dashing and b.invincible_timer <= 0:
+                b.health -= 25
+                b.hit_by_melee = True
+                b.invincible_timer = 20
+                effects['hit_stop'] = 12
+                effects['screen_shake'] = 10
+                particles.append(Particle(b.rect.centerx, b.rect.centery, (0, 255, 255), 15))
+            elif self.melee_timer > 0 and self.melee_hitbox.colliderect(b.rect) and b.invincible_timer <= 0:
+                b.health -= 50
+                b.hit_by_melee = True
+                b.invincible_timer = 20
+                effects['hit_stop'] = 15
+                effects['screen_shake'] = 12
+                particles.append(Particle(b.rect.centerx, b.rect.centery, (255, 0, 0), 20))
 
-        if self.rect.left < 0: self.rect.left = 0
-        
-        # Chlorophyll Boost
-        if ch == 'Malunggay':
-            if pygame.time.get_ticks() % 300 == 0:
-                self.level_score += 10
-                
-        if abs(self.vel_x) > 6 or self.dash_timer > 0 or self.speed_boost_timer > 0:
-            self.trail.append((self.rect.x, self.rect.y, self.facing, self.gravity_dir, 150))
-            
-        if getattr(self, 'is_evolved', False) and pygame.time.get_ticks() % 5 == 0:
-            particles.append(Particle(self.rect.centerx, self.rect.centery, (255, 215, 0), size=5))
-            
-        new_trail = []
-        for tx, ty, tf, tg, alpha in self.trail:
-            alpha -= 15
-            if alpha > 0:
-                new_trail.append((tx, ty, tf, tg, alpha))
-        self.trail = new_trail
-        
-        return effects
-
-    def _collide(self, vel_x, vel_y, platforms, blocks):
+    def _collide(self, vel_x, vel_y, platforms, blocks, keys=None):
         ch = self.selected_character
         is_jeepney_dash = (ch == 'Jeepney' and self.dash_timer > 0)
-        keys = pygame.key.get_pressed()
+        if keys is None:
+            keys = pygame.key.get_pressed()
         pressing_left = keys[pygame.K_LEFT] or keys[pygame.K_a]
         pressing_right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
         

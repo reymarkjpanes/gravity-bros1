@@ -4,6 +4,36 @@ from entities.enemy import Enemy
 from entities.boss import Boss
 from .themes import get_boss_type
 
+# ── Endless mode platform reachability constants ──────────────────────────────
+MAX_H_GAP = 240   # pixels — player max horizontal jump distance
+MAX_V_DIFF = 180  # pixels — player max vertical jump height
+Y_MIN, Y_MAX = 150, 500
+
+
+def _build_bonus_room(base_x: int, base_y: int,
+                      platforms: list, coins: list, gems: list,
+                      hidden_portals: list) -> None:
+    """Append bonus room objects into the provided lists in-place."""
+    platforms.append(Platform(base_x, base_y + 400, 800, 600))
+    for i in range(10):
+        coins.append(Coin(base_x + 100 + i * 50, base_y + 300))
+        if i % 3 == 0:
+            gems.append(Gem(base_x + 100 + i * 50, base_y + 200))
+    hidden_portals.append(HiddenPortal(base_x + 700, base_y + 320))
+
+
+def _clamp_endless_chunk(last_x: int, last_y: int,
+                          gap: int, width: int, y: int
+                          ) -> tuple[int, int, int]:
+    """Return (clamped_gap, clamped_width, clamped_y).
+
+    Ensures generated platforms are always reachable by the player.
+    """
+    gap = min(gap, MAX_H_GAP)
+    y = max(Y_MIN, min(Y_MAX, y))
+    y = max(last_y - MAX_V_DIFF, min(last_y + MAX_V_DIFF, y))
+    return gap, width, y
+
 # Level-themed enemy types: each level prefers certain enemy archetypes
 LEVEL_ENEMY_POOL = {
     1: ['walker'],                           # Tutorial: easy walkers only
@@ -100,11 +130,7 @@ def build_tutorial_level(difficulty):
     
     # Bonus Room
     bx, by = 0, -2000
-    platforms.append(Platform(bx, by + 400, 800, 600))
-    for i in range(10):
-        coins.append(Coin(bx + 100 + i * 50, by + 300))
-        if i % 3 == 0: gems.append(Gem(bx + 100 + i * 50, by + 200))
-    hidden_portals.append(HiddenPortal(bx + 700, by + 320))
+    _build_bonus_room(bx, by, platforms, coins, gems, hidden_portals)
     
     return platforms, blocks, enemies, bosses, coins, gems, stars, power_ups, portal, scenery, hazards, checkpoints, hidden_portals
 
@@ -220,11 +246,6 @@ def build_level(level, difficulty):
     # Bonus Room Generation at Y = -2000
     bx = 0
     by = -2000
-    platforms.append(Platform(bx, by + 400, 800, 600))
-    for i in range(10):
-        coins.append(Coin(bx + 100 + i * 50, by + 300))
-        if i % 3 == 0: gems.append(Gem(bx + 100 + i * 50, by + 200))
-    # Return portal back to normal spawn
-    hidden_portals.append(HiddenPortal(bx + 700, by + 320))
+    _build_bonus_room(bx, by, platforms, coins, gems, hidden_portals)
 
     return platforms, blocks, enemies, bosses, coins, gems, stars, power_ups, portal, scenery, hazards, checkpoints, hidden_portals

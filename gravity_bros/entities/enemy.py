@@ -2,6 +2,7 @@ import pygame
 import math
 import random
 import os
+import sys
 from config import WHITE, BLACK, DIRT_BROWN
 
 class Enemy:
@@ -44,6 +45,16 @@ class Enemy:
                     path = os.path.join(assets_dir, f'enemy_{e_type}_{d}.png')
                 if os.path.exists(path):
                     self.images[f'{e_type}_{d}'] = pygame.image.load(path).convert_alpha()
+                else:
+                    surf = pygame.Surface((24, 24))
+                    surf.fill((200, 100, 200))
+                    self.images[f'{e_type}_{d}'] = surf
+                    print(f"[WARNING] Sprite not found: {path}", file=sys.stderr)
+
+    def reset_position(self, x: int, y: int) -> None:
+        """Move this enemy to (x, y). Use instead of direct rect assignment."""
+        self.rect.x = x
+        self.rect.y = y
 
     def take_damage(self, amount=1):
         """Deal damage, handle shield, trigger death."""

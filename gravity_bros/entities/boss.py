@@ -49,6 +49,11 @@ class Boss:
         self.arena_left  = x - arena_half
         self.arena_right = x + arena_half + self.rect.width
 
+    def reset_position(self, x: int, y: int) -> None:
+        """Move this boss to (x, y). Use instead of direct rect assignment."""
+        self.rect.x = x
+        self.rect.y = y
+
     def update(self, platforms, blocks, player, enemies, projectiles, particles):
 
         if self.dead: return
